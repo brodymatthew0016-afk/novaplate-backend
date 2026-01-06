@@ -296,10 +296,47 @@ app.post('/api/feedback', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const { feedbackText, feedbackType } = req.body;
 
+    // Save to database
     const result = await pool.query(
       'INSERT INTO feedback (user_id, feedback_text, feedback_type) VALUES ($1, $2, $3) RETURNING *',
       [userId, feedbackText, feedbackType]
     );
+
+    // Get user email
+    const userResult = await pool.query(
+      'SELECT email FROM users WHERE id = $1',
+      [userId]
+    );
+    const userEmail = userResult.rows[0]?.email || 'unknown';
+
+    // Submit to Google Form
+    try {
+      const axios = require('axios');
+      const FormData = require('form-data');
+      
+      const GOOGLE_FORM_ID = '1FAIpQLScQPTt23NbQ1Nrty007ZRFs9mFCHk-goAilKITl5_Hfd4CDcg';
+      const EMAIL_ENTRY_ID = 'entry.1176347361';
+      const TYPE_ENTRY_ID = 'entry.2069532797';
+      const TEXT_ENTRY_ID = 'entry.843023838';
+      
+      const formData = new FormData();
+      formData.append(EMAIL_ENTRY_ID, userEmail);
+      formData.append(TYPE_ENTRY_ID, feedbackType);
+      formData.append(TEXT_ENTRY_ID, feedbackText);
+      
+      await axios.post(
+        `https://docs.google.com/forms/d/e/${GOOGLE_FORM_ID}/formResponse`,
+        formData,
+        {
+          headers: formData.getHeaders(),
+          validateStatus: () => true
+        }
+      );
+      
+      console.log('✅ Feedback submitted to Google Form');
+    } catch (googleError) {
+      console.error('Error submitting to Google Form:', googleError.message);
+    }
 
     res.status(201).json(result.rows[0]);
   } catch (error) {

@@ -1,11 +1,12 @@
+require('dotenv').config();
 const { Pool } = require('pg');
 
+// Use Render database URL from environment variable
 const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'novaplate',
-  password: 'WC16tmh5', // Replace with your password
-  port: 5432,
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false
+  }
 });
 
 const covaMenu = [
@@ -44,24 +45,30 @@ async function insertCovaMenu() {
     const covaResult = await client.query(
       "SELECT id FROM dining_halls WHERE name = 'Cova'"
     );
+    
+    if (covaResult.rows.length === 0) {
+      console.error('❌ Cova dining hall not found!');
+      return;
+    }
+    
     const covaId = covaResult.rows[0].id;
 
     // Insert each menu item
     for (const item of covaMenu) {
       await client.query(
         `INSERT INTO menu_items 
-        (dining_hall_id, name, portion, calories, protein, carbs, fat, category, is_static) 
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)`,
-        [covaId, item.name, item.portion, item.calories, item.protein, item.carbs, item.fat, item.category]
+        (dining_hall_id, name, calories, protein, carbs, fat, category, is_static) 
+        VALUES ($1, $2, $3, $4, $5, $6, $7, TRUE)`,
+        [covaId, item.name, item.calories, item.protein, item.carbs, item.fat, item.category]
       );
     }
 
     console.log('✅ Cova menu inserted successfully!');
   } catch (error) {
-    console.error('Error inserting Cova menu:', error);
+    console.error('❌ Error inserting Cova menu:', error);
   } finally {
     client.release();
-    pool.end();
+    await pool.end();
   }
 }
 
