@@ -292,7 +292,55 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
 });
 
 // ========== FEEDBACK ROUTES ==========
+// ========== USER GOAL ROUTES ==========
 
+// Get user's calorie goal
+app.get('/api/user/goal', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    
+    const result = await pool.query(
+      'SELECT daily_calorie_goal FROM users WHERE id = $1',
+      [userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const calorieGoal = result.rows[0].daily_calorie_goal || 2000;
+    res.json({ daily_calorie_goal: calorieGoal });
+  } catch (error) {
+    console.error('Error fetching calorie goal:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Update user's calorie goal
+app.put('/api/user/goal', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const { daily_calorie_goal } = req.body;
+
+    if (!daily_calorie_goal || daily_calorie_goal <= 0) {
+      return res.status(400).json({ error: 'Invalid calorie goal' });
+    }
+
+    const result = await pool.query(
+      'UPDATE users SET daily_calorie_goal = $1 WHERE id = $2 RETURNING daily_calorie_goal',
+      [daily_calorie_goal, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    res.json({ daily_calorie_goal: result.rows[0].daily_calorie_goal });
+  } catch (error) {
+    console.error('Error updating calorie goal:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 // Submit feedback
 app.post('/api/feedback', authenticateToken, async (req, res) => {
   try {
