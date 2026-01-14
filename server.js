@@ -4,7 +4,6 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const cron = require('node-cron');
 const scraper = require('./scraper');
 
 const app = express();
@@ -291,7 +290,6 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   }
 });
 
-// ========== FEEDBACK ROUTES ==========
 // ========== USER GOAL ROUTES ==========
 
 // Get user's calorie goal
@@ -341,6 +339,9 @@ app.put('/api/user/goal', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+
+// ========== FEEDBACK ROUTES ==========
+
 // Submit feedback
 app.post('/api/feedback', authenticateToken, async (req, res) => {
   try {
@@ -396,18 +397,7 @@ app.post('/api/feedback', authenticateToken, async (req, res) => {
   }
 });
 
-// ========== SCRAPING SCHEDULE ==========
-
-// Schedule daily scraping at 6:00 AM
-cron.schedule('0 6 * * *', async () => {
-  console.log('🕐 Running scheduled menu scraping...');
-  try {
-    await scraper.scrapeAllMenus();
-    console.log('✅ Menu scraping completed');
-  } catch (error) {
-    console.error('❌ Error during scheduled scraping:', error);
-  }
-});
+// ========== SCRAPING ENDPOINTS ==========
 
 // Manual trigger endpoint for testing
 app.post('/api/scrape-menus', authenticateToken, async (req, res) => {
@@ -424,5 +414,5 @@ app.post('/api/scrape-menus', authenticateToken, async (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log('📅 Menu scraping scheduled for 6:00 AM daily');
+  console.log('📅 Menu scraping handled by GitHub Actions (runs daily at 6:00 AM EST)');
 });
