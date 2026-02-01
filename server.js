@@ -156,6 +156,8 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
 
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
+    console.log('API getting menu for hall', diningHallId, 'on date:', selectedDate);
+
     // Get dining hall info
     const hallResult = await pool.query(
       'SELECT * FROM dining_halls WHERE id = $1',
@@ -190,6 +192,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
     }
 
     const result = await pool.query(query, params);
+    console.log('Query returned', result.rows.length, 'items');
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching menu:', error);
