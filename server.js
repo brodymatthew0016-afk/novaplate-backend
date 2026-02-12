@@ -136,12 +136,54 @@ app.post('/api/auth/login', async (req, res) => {
 // ========== DINING HALL ROUTES ==========
 
 // Get all dining halls
-app.get('/api/dining-halls', authenticateToken, async (req, res) => {
+// Get menu for a dining hall on a specific date
+app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM dining_halls ORDER BY name');
+    const { diningHallId } = req.params;
+    const { date } = req.query; // format: YYYY-MM-DD
+
+    const selectedDate = date || new Date().toISOString().split('T')[0];
+
+    console.log('API getting menu for hall', diningHallId, 'on date:', selectedDate);
+
+    // Get dining hall info
+    const hallResult = await pool.query(
+      'SELECT * FROM dining_halls WHERE id = $1',
+      [diningHallId]
+    );
+
+    if (hallResult.rows.length === 0) {
+      return res.status(404).json({ error: 'Dining hall not found' });
+    }
+
+    const hall = hallResult.rows[0];
+
+    let query;
+    let params;
+
+    if (hall.scrape_enabled) {
+      // For Spit and Pit: get scraped menu for specific date PLUS static items
+      query = `
+        SELECT * FROM menu_items 
+        WHERE dining_hall_id = $1 AND (date = $2 OR (is_static = TRUE AND date IS NULL))
+        ORDER BY meal_type, category, name
+      `;
+      params = [diningHallId, selectedDate];
+    } else {
+      // For Cova: get static menu
+      query = `
+        SELECT * FROM menu_items 
+        WHERE dining_hall_id = $1 AND is_static = TRUE
+        ORDER BY category, name
+      `;
+      params = [diningHallId];
+    }
+
+    const result = await pool.query(query, params);
+    console.log('Query returned', result.rows.length, 'items');
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching dining halls:', error);
+    console.error('Error fetching menu:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
