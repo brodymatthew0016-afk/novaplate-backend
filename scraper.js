@@ -238,12 +238,6 @@ async function scrapeAllMenus(dateStr = null) {
           
           // Insert menu items into database
           for (const item of menuData.items) {
-            // Skip items with no nutritional data
-            if (item.calories === 0 && item.protein === 0 && item.carbs === 0 && item.fat === 0) {
-              console.log(`    Skipping ${item.name} - no nutrition data`);
-              continue;
-            }
-            
             // Skip Assorted Cereal (we have specific cereals instead)
             if (item.name === 'Assorted Cereal') {
               console.log(`    Skipping ${item.name} - using specific cereals instead`);
