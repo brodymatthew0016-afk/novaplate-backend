@@ -244,6 +244,12 @@ async function scrapeAllMenus(dateStr = null) {
               continue;
             }
             
+            // Skip Assorted Cereal (we have specific cereals instead)
+            if (item.name === 'Assorted Cereal') {
+              console.log(`    Skipping ${item.name} - using specific cereals instead`);
+              continue;
+            }
+            
             await client.query(
               `INSERT INTO menu_items 
               (dining_hall_id, name, portion, calories, protein, carbs, fat, category, meal_type, date, is_static) 
