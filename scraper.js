@@ -25,7 +25,7 @@ async function scrapeVillanovaMenu(date = null, diningHall = 'dougherty_hall', m
   
   try {
     const dateStr = date || formatDate(new Date());
-    const url = `https://www1.villanova.edu/villanova/services/dining/menus-ii.html#${diningHall}-${mealTime}-${dateStr}`;
+    const url = `https://www.villanova.edu/villanova/services/dining/menus-ii.html#${diningHall}-${mealTime}-${dateStr}`;
     
     console.log(`Scraping: ${url}`);
     await page.goto(url, { waitUntil: 'networkidle2', timeout: 60000 });
@@ -179,8 +179,9 @@ function formatDateForDB(dateStr) {
 
 // Map dining hall names to database IDs
 const diningHallMap = {
-  'dougherty_hall': 'Pit',    // Dougherty Hall = Spit
-  'the_court_at_donahue': 'Spit'        // The Court at Donahue = Pit
+  'dougherty_hall': 'Pit',
+  'the_court_at_donahue': 'Spit',
+  'st_marys_hall': 'St Marys Hall'
 };
 
 // Map meal times to meal types
@@ -200,15 +201,16 @@ async function scrapeAllMenus(dateStr = null) {
     
     console.log(`Starting scraping for date: ${scrapeDateStr} (DB: ${dbDate})`);
     
-    // Get dining halls that need scraping (Spit and Pit only)
+    // Get dining halls that need scraping
     const hallsResult = await client.query(
       "SELECT * FROM dining_halls WHERE scrape_enabled = TRUE"
     );
     
-    // Only scrape Spit and Pit (not St. Mary's Hall)
+    // Scrape Spit, Pit, and St. Mary's Hall
     const diningHalls = [
-      'dougherty_hall',  // Spit
-      'the_court_at_donahue'    // Pit
+      'dougherty_hall',
+      'the_court_at_donahue',
+      'st_marys_hall'
     ];
     
     const mealTimes = ['breakfast', 'lunch', 'dinner'];
