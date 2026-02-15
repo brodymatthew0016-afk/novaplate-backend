@@ -178,15 +178,15 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
       query = `
         SELECT * FROM menu_items 
         WHERE dining_hall_id = $1 AND (date = $2 OR (is_static = TRUE AND date IS NULL))
-        ORDER BY meal_type, category, name
+        ORDER BY meal_type, category, sub_station, name
       `;
       params = [diningHallId, selectedDate];
     } else {
-      // For Cova: get static menu
+      // For Conn and other static menus: get static menu
       query = `
         SELECT * FROM menu_items 
         WHERE dining_hall_id = $1 AND is_static = TRUE
-        ORDER BY category, name
+        ORDER BY category, sub_station, name
       `;
       params = [diningHallId];
     }
