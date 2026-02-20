@@ -152,7 +152,8 @@ app.get('/api/dining-halls', authenticateToken, async (req, res) => {
 app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
     const { diningHallId } = req.params;
-    const { date } = req.query; // format: YYYY-MM-DD
+    const { date } = req.query;
+    console.log('RAW REQUEST - diningHallId:', diningHallId, 'date:', date, 'type:', typeof date);
 
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
