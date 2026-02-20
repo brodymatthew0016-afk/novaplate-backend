@@ -312,9 +312,11 @@ async function scrapeVillanovaMenu(date = null, diningHall = 'dougherty_hall', m
 }
 
 function formatDate(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  // Use EST timezone to match the app's local date
+  const estDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
+  const year = estDate.getFullYear();
+  const month = String(estDate.getMonth() + 1).padStart(2, '0');
+  const day = String(estDate.getDate()).padStart(2, '0');
   return `${year}${month}${day}`;
 }
 
