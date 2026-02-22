@@ -296,7 +296,29 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+// Get recently logged unique meals
+app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
 
+    const result = await pool.query(
+      `SELECT DISTINCT ON (COALESCE(ml.custom_name, mi.name))
+        ml.id, ml.custom_name, mi.name as menu_item_name, mi.id as menu_item_id,
+        ml.calories, ml.protein, ml.carbs, ml.fat, ml.created_at
+       FROM meal_logs ml
+       LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
+       WHERE ml.user_id = $1
+       ORDER BY COALESCE(ml.custom_name, mi.name), ml.created_at DESC
+       LIMIT 20`,
+      [userId]
+    );
+
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching recent meals:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 // ========== USER GOAL ROUTES ==========
 
 // Get user's calorie goal
