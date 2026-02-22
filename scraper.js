@@ -14,10 +14,8 @@ const pool = new Pool({
 function getCategoryForItem(itemName, hallName, mealType) {
   const name = itemName.toLowerCase().trim();
 
-  // ========== SPIT (the_court_at_donahue) ==========
   if (hallName === 'the_court_at_donahue') {
 
-    // --- SALAD BAR (shared across all meals) ---
     const saladBarItems = [
       'spring mix', 'romaine', 'little leaf', 'shredded carrot', 'cherry tomato',
       'cucumber', 'hard boiled egg', 'red onion', 'olive', 'mozzarella cheese',
@@ -30,7 +28,6 @@ function getCategoryForItem(itemName, hallName, mealType) {
     ];
     if (saladBarItems.some(i => name.includes(i))) return 'Salad Bar';
 
-    // --- AUGGIE'S DELI (shared across lunch & dinner) ---
     const auggiesDeliItems = [
       'turkey breast', 'genoa salami', 'roast beef', 'domestic ham',
       'grilled chicken', 'buffalo chicken breast', 'green goddess crunch wrap',
@@ -48,14 +45,12 @@ function getCategoryForItem(itemName, hallName, mealType) {
     ];
     if (auggiesDeliItems.some(i => name.includes(i))) return "Auggie's Deli";
 
-    // --- DESSERTS ---
     const dessertItems = [
       'soft serve', 'ice cream', 'brownie', 'cookie', 'sugar cookie', 'chocolate chip cookie'
     ];
     if (dessertItems.some(i => name.includes(i))) return 'Desserts';
 
-    // --- BREAKFAST SPECIFIC ---
-    if (mealType === 'breakfast') {
+    if (mealType === 'breakfast' || mealType === 'brunch') {
       const spreadablesBar = [
         'bagel', 'biscuit', 'cream cheese', 'guacamole', 'whipped butter',
         'hazelnut', 'chocolate spread', 'housemade jam', 'jam'
@@ -69,7 +64,7 @@ function getCategoryForItem(itemName, hallName, mealType) {
 
       const traditions = [
         'pork sausage', 'tater tot', 'morning harvest burrito', 'burrito',
-        'vegetable frittata', 'frittata', 'tofu scramble'
+        'vegetable frittata', 'frittata', 'tofu scramble', 'cinnamon roll', 'bacon'
       ];
       if (traditions.some(i => name.includes(i))) return 'Traditions';
 
@@ -80,22 +75,19 @@ function getCategoryForItem(itemName, hallName, mealType) {
 
       const grainsForLife = [
         'overnight oat', 'pumpkin seed', 'chia pudding', 'granola',
-        'sunflower seed', 'rolled oatmeal', 'oatmeal'
+        'sunflower seed', 'rolled oatmeal', 'oatmeal', 'cream of wheat',
+        'sorbet', 'honeydew', 'cantaloupe', 'pineapple', 'grape', 'grapefruit',
+        'strawberr', 'raspberr', 'blueberr', 'blackberr', 'greek yogurt',
+        'cottage cheese', 'vanilla yogurt', 'strawberry yogurt', 'fresh berr'
       ];
       if (grainsForLife.some(i => name.includes(i))) return 'Grains For Life';
 
       const dailyBreakfast = [
-        'muffin', 'loaf cake', 'cereal', 'hard boiled egg', 'daily cut fruit',
-        'fresh berr', 'sorbet', 'honeydew', 'cantaloupe', 'pineapple',
-        'grape', 'grapefruit', 'strawberr', 'raspberr', 'blueberr', 'blackberr',
-        'greek yogurt', 'cottage cheese', 'vanilla yogurt', 'strawberry yogurt'
+        'muffin', 'loaf cake', 'cereal', 'hard boiled egg', 'daily cut fruit'
       ];
       if (dailyBreakfast.some(i => name.includes(i))) return 'Daily Breakfast';
-
-      if (name.includes('salad bar') || name.includes('toppings available')) return 'Salad Bar';
     }
 
-    // --- LUNCH SPECIFIC ---
     if (mealType === 'lunch') {
       const goodEarth = [
         'spinach', 'ricotta cheese', 'parmesan cheese', 'mushroom',
@@ -126,13 +118,11 @@ function getCategoryForItem(itemName, hallName, mealType) {
       if (traditions.some(i => name.includes(i))) return 'Traditions';
 
       const grainsForLife = [
-        'buffalo & blue salad', 'apple salad', 'caesar salad',
-        'cottage cheese'
+        'buffalo & blue salad', 'apple salad', 'caesar salad', 'cottage cheese'
       ];
       if (grainsForLife.some(i => name.includes(i))) return 'Grains For Life';
     }
 
-    // --- DINNER SPECIFIC ---
     if (mealType === 'dinner') {
       const redLantern = [
         'vegetable fried rice', 'fried rice', 'stir fried noodle',
@@ -152,8 +142,7 @@ function getCategoryForItem(itemName, hallName, mealType) {
       const grainsForLife = [
         'ramen chicken', 'ramen broth', 'gooey egg', 'udon noodle',
         'shitake mushroom', 'shitaki mushroom', 'red cabbage', 'scallion',
-        'pad thai', 'bok choy', 'apple salad', 'caesar salad',
-        'cottage cheese'
+        'pad thai', 'bok choy', 'apple salad', 'caesar salad', 'cottage cheese'
       ];
       if (grainsForLife.some(i => name.includes(i))) return 'Grains For Life';
 
@@ -162,9 +151,67 @@ function getCategoryForItem(itemName, hallName, mealType) {
     }
   }
 
-  // ========== DEFAULT ==========
   return 'Main Course';
 }
+
+// ========== STATIC BRUNCH ITEMS FOR SPIT WEEKENDS ==========
+
+const SPIT_STATIC_BRUNCH_ITEMS = [
+  // The Fryery
+  { name: 'Texas French Toast', portion: 'Standard', calories: 280, protein: 8, carbs: 42, fat: 8, category: 'The Fryery' },
+  { name: 'Pancakes', portion: 'Standard', calories: 180, protein: 4, carbs: 35, fat: 3, category: 'The Fryery' },
+  { name: 'Maple Syrup', portion: 'Standard', calories: 100, protein: 0, carbs: 26, fat: 0, category: 'The Fryery' },
+  { name: 'Breakfast Sandwich', portion: 'Standard', calories: 380, protein: 18, carbs: 36, fat: 18, category: 'The Fryery' },
+  // Traditions
+  { name: 'Crispy Bacon', portion: 'Standard', calories: 80, protein: 6, carbs: 0, fat: 6, category: 'Traditions' },
+  { name: 'Nova Cinnamon Roll', portion: 'Standard', calories: 340, protein: 5, carbs: 54, fat: 12, category: 'Traditions' },
+  { name: 'Morning Harvest Burrito', portion: 'Standard', calories: 350, protein: 14, carbs: 40, fat: 14, category: 'Traditions' },
+  { name: 'Tater Tot Puffs', portion: 'Standard', calories: 160, protein: 2, carbs: 22, fat: 7, category: 'Traditions' },
+  { name: 'Tofu Scramble', portion: 'Standard', calories: 120, protein: 10, carbs: 4, fat: 7, category: 'Traditions' },
+  // Daily Breakfast
+  { name: 'Assorted Muffins & Loaf Cakes', portion: 'Standard', calories: 340, protein: 5, carbs: 52, fat: 13, category: 'Daily Breakfast' },
+  { name: 'Hard Boiled Eggs', portion: 'Standard', calories: 70, protein: 6, carbs: 0, fat: 5, category: 'Daily Breakfast' },
+  { name: 'Daily Cut Fruit', portion: 'Standard', calories: 60, protein: 1, carbs: 15, fat: 0, category: 'Daily Breakfast' },
+  // Spreadables Bar
+  { name: 'NY Style Plain Bagel', portion: 'Standard', calories: 270, protein: 10, carbs: 53, fat: 2, category: 'Spreadables Bar' },
+  { name: 'NY Style Everything Bagel', portion: 'Standard', calories: 280, protein: 10, carbs: 54, fat: 3, category: 'Spreadables Bar' },
+  { name: 'NY Style Sesame Bagel', portion: 'Standard', calories: 275, protein: 10, carbs: 53, fat: 3, category: 'Spreadables Bar' },
+  { name: 'NY Style Cinnamon Raisin Bagel', portion: 'Standard', calories: 280, protein: 9, carbs: 57, fat: 2, category: 'Spreadables Bar' },
+  { name: 'Biscuits', portion: 'Standard', calories: 220, protein: 4, carbs: 28, fat: 10, category: 'Spreadables Bar' },
+  { name: 'Whipped Cream Cheese', portion: 'Standard', calories: 90, protein: 2, carbs: 2, fat: 9, category: 'Spreadables Bar' },
+  { name: 'Guacamole', portion: 'Standard', calories: 50, protein: 1, carbs: 3, fat: 4, category: 'Spreadables Bar' },
+  { name: 'Whipped Butter', portion: 'Standard', calories: 70, protein: 0, carbs: 0, fat: 8, category: 'Spreadables Bar' },
+  { name: 'Hazelnut Free Chocolate Spread', portion: 'Standard', calories: 180, protein: 2, carbs: 23, fat: 9, category: 'Spreadables Bar' },
+  { name: 'Housemade Jam', portion: 'Standard', calories: 50, protein: 0, carbs: 13, fat: 0, category: 'Spreadables Bar' },
+  // Grains For Life
+  { name: 'Overnight Oats', portion: 'Standard', calories: 180, protein: 6, carbs: 30, fat: 4, category: 'Grains For Life' },
+  { name: 'Organic Pumpkin Seed', portion: 'Standard', calories: 70, protein: 4, carbs: 2, fat: 6, category: 'Grains For Life' },
+  { name: 'Chia Pudding', portion: 'Standard', calories: 150, protein: 5, carbs: 18, fat: 7, category: 'Grains For Life' },
+  { name: 'House Made Granola', portion: 'Standard', calories: 120, protein: 3, carbs: 22, fat: 3, category: 'Grains For Life' },
+  { name: 'Roasted Shelled Sunflower Seed', portion: 'Standard', calories: 80, protein: 3, carbs: 3, fat: 7, category: 'Grains For Life' },
+  { name: '100% Natural Rolled Oatmeal', portion: 'Standard', calories: 150, protein: 5, carbs: 27, fat: 3, category: 'Grains For Life' },
+  { name: 'Fresh Berries', portion: 'Standard', calories: 50, protein: 1, carbs: 12, fat: 0, category: 'Grains For Life' },
+  { name: 'Dragon Fruit Sorbet', portion: 'Standard', calories: 90, protein: 0, carbs: 22, fat: 0, category: 'Grains For Life' },
+  { name: 'Acai Sorbet', portion: 'Standard', calories: 100, protein: 1, carbs: 24, fat: 1, category: 'Grains For Life' },
+  { name: 'Honeydew Melon', portion: 'Standard', calories: 45, protein: 1, carbs: 11, fat: 0, category: 'Grains For Life' },
+  { name: 'Cantaloupe Melon', portion: 'Standard', calories: 50, protein: 1, carbs: 12, fat: 0, category: 'Grains For Life' },
+  { name: 'Pineapple', portion: 'Standard', calories: 50, protein: 1, carbs: 13, fat: 0, category: 'Grains For Life' },
+  { name: 'Grapes', portion: 'Standard', calories: 60, protein: 1, carbs: 16, fat: 0, category: 'Grains For Life' },
+  { name: 'Grapefruit', portion: 'Standard', calories: 40, protein: 1, carbs: 10, fat: 0, category: 'Grains For Life' },
+  { name: 'Strawberries', portion: 'Standard', calories: 35, protein: 1, carbs: 8, fat: 0, category: 'Grains For Life' },
+  { name: 'Raspberries', portion: 'Standard', calories: 30, protein: 1, carbs: 7, fat: 0, category: 'Grains For Life' },
+  { name: 'Blueberries', portion: 'Standard', calories: 40, protein: 1, carbs: 10, fat: 0, category: 'Grains For Life' },
+  { name: 'Blackberries', portion: 'Standard', calories: 30, protein: 1, carbs: 7, fat: 0, category: 'Grains For Life' },
+  { name: 'Greek Yogurt', portion: 'Standard', calories: 100, protein: 17, carbs: 6, fat: 0, category: 'Grains For Life' },
+  { name: 'Cottage Cheese', portion: 'Standard', calories: 110, protein: 14, carbs: 6, fat: 2, category: 'Grains For Life' },
+  { name: 'Vanilla Yogurt', portion: 'Standard', calories: 150, protein: 5, carbs: 26, fat: 2, category: 'Grains For Life' },
+  { name: 'Strawberry Yogurt', portion: 'Standard', calories: 150, protein: 5, carbs: 27, fat: 2, category: 'Grains For Life' },
+  // Heavenly Things
+  { name: 'Scrambled Egg Whites', portion: 'Standard', calories: 50, protein: 11, carbs: 1, fat: 0, category: 'Heavenly Things' },
+  { name: 'Scrambled Eggs', portion: 'Standard', calories: 140, protein: 10, carbs: 1, fat: 10, category: 'Heavenly Things' },
+  { name: 'Eggs And Omelets', portion: 'Standard', calories: 140, protein: 10, carbs: 1, fat: 10, category: 'Heavenly Things' },
+  { name: 'Just Egg Available (Egg Free)', portion: 'Standard', calories: 70, protein: 5, carbs: 3, fat: 5, category: 'Heavenly Things' },
+];
 
 // ========== SCRAPER ==========
 
@@ -312,7 +359,6 @@ async function scrapeVillanovaMenu(date = null, diningHall = 'dougherty_hall', m
 }
 
 function formatDate(date) {
-  // Use EST timezone to match the app's local date
   const estDate = new Date(date.toLocaleString('en-US', { timeZone: 'America/New_York' }));
   const year = estDate.getFullYear();
   const month = String(estDate.getMonth() + 1).padStart(2, '0');
@@ -327,6 +373,15 @@ function formatDateForDB(dateStr) {
   return dateStr;
 }
 
+function isWeekend(dateStr) {
+  const year = parseInt(dateStr.substring(0, 4));
+  const month = parseInt(dateStr.substring(4, 6)) - 1;
+  const day = parseInt(dateStr.substring(6, 8));
+  const date = new Date(year, month, day);
+  const dayOfWeek = date.getDay();
+  return dayOfWeek === 0 || dayOfWeek === 6;
+}
+
 const diningHallMap = {
   'dougherty_hall': 'Pit',
   'the_court_at_donahue': 'Spit',
@@ -336,7 +391,8 @@ const diningHallMap = {
 const mealTypeMap = {
   'breakfast': 'Breakfast',
   'lunch': 'Lunch',
-  'dinner': 'Dinner'
+  'dinner': 'Dinner',
+  'brunch': 'Brunch'
 };
 
 async function scrapeAllMenus(dateStr = null) {
@@ -345,8 +401,9 @@ async function scrapeAllMenus(dateStr = null) {
   try {
     const scrapeDateStr = dateStr || formatDate(new Date());
     const dbDate = formatDateForDB(scrapeDateStr);
+    const weekend = isWeekend(scrapeDateStr);
     
-    console.log(`Starting scraping for date: ${scrapeDateStr} (DB: ${dbDate})`);
+    console.log(`Starting scraping for date: ${scrapeDateStr} (DB: ${dbDate}) - Weekend: ${weekend}`);
     
     const hallsResult = await client.query(
       "SELECT * FROM dining_halls WHERE scrape_enabled = TRUE"
@@ -358,10 +415,9 @@ async function scrapeAllMenus(dateStr = null) {
       'st_marys_hall'
     ];
     
-    const mealTimes = ['breakfast', 'lunch', 'dinner'];
-    
     for (const hall of diningHalls) {
       const hallName = diningHallMap[hall];
+      const isSpit = hall === 'the_court_at_donahue';
       
       const dbHall = hallsResult.rows.find(h => h.name === hallName);
       if (!dbHall) {
@@ -375,11 +431,17 @@ async function scrapeAllMenus(dateStr = null) {
         'DELETE FROM menu_items WHERE dining_hall_id = $1 AND date = $2',
         [dbHall.id, dbDate]
       );
+
+      // Weekend at Spit: skip breakfast, scrape lunch as brunch, keep dinner
+      const mealTimes = (isSpit && weekend) ? ['brunch', 'dinner'] : ['breakfast', 'lunch', 'dinner'];
       
       for (const meal of mealTimes) {
         try {
-          console.log(`  Scraping ${meal}...`);
-          const menuData = await scrapeVillanovaMenu(scrapeDateStr, hall, meal);
+          // Brunch scrapes the lunch URL but stores as Brunch
+          const scrapeAs = meal === 'brunch' ? 'lunch' : meal;
+
+          console.log(`  Scraping ${meal}${meal === 'brunch' ? ' (via lunch URL)' : ''}...`);
+          const menuData = await scrapeVillanovaMenu(scrapeDateStr, hall, scrapeAs);
           
           for (const item of menuData.items) {
             if (item.name === 'Assorted Cereal') {
@@ -387,7 +449,6 @@ async function scrapeAllMenus(dateStr = null) {
               continue;
             }
 
-            // Get category from mapping function
             const category = getCategoryForItem(item.name, hall, meal);
             
             await client.query(
@@ -408,8 +469,32 @@ async function scrapeAllMenus(dateStr = null) {
               ]
             );
           }
+
+          // Inject static brunch items for Spit on weekends
+          if (isSpit && meal === 'brunch') {
+            console.log(`  Injecting ${SPIT_STATIC_BRUNCH_ITEMS.length} static brunch items...`);
+            for (const item of SPIT_STATIC_BRUNCH_ITEMS) {
+              await client.query(
+                `INSERT INTO menu_items 
+                (dining_hall_id, name, portion, calories, protein, carbs, fat, category, meal_type, date, is_static) 
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, TRUE)`,
+                [
+                  dbHall.id,
+                  item.name,
+                  item.portion,
+                  item.calories,
+                  item.protein,
+                  item.carbs,
+                  item.fat,
+                  item.category,
+                  'Brunch',
+                  dbDate,
+                ]
+              );
+            }
+          }
           
-          console.log(`    ✅ Added ${menuData.items.length} items for ${meal}`);
+          console.log(`    ✅ Added ${menuData.items.length} scraped items for ${meal}`);
           
           await new Promise(resolve => setTimeout(resolve, 2000));
           
