@@ -4,7 +4,6 @@ const cors = require('cors');
 const { Pool } = require('pg');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const scraper = require('./scraper');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -89,20 +88,16 @@ app.get('/api/dining-halls', authenticateToken, async (req, res) => {
 app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
     const { diningHallId } = req.params;
-    const { date } = req.query;
-    const selectedDate = date || new Date().toISOString().split('T')[0];
     const hallResult = await pool.query('SELECT * FROM dining_halls WHERE id = $1', [diningHallId]);
     if (hallResult.rows.length === 0) return res.status(404).json({ error: 'Dining hall not found' });
-    const hall = hallResult.rows[0];
-    let query, params;
-    if (hall.scrape_enabled) {
-      query = `SELECT * FROM menu_items WHERE dining_hall_id = $1 AND (date = $2 OR (is_static = TRUE AND date IS NULL)) ORDER BY meal_type, category, sub_station, name`;
-      params = [diningHallId, selectedDate];
-    } else {
-      query = `SELECT * FROM menu_items WHERE dining_hall_id = $1 AND is_static = TRUE ORDER BY category, sub_station, name`;
-      params = [diningHallId];
-    }
-    const result = await pool.query(query, params);
+
+    const result = await pool.query(
+      `SELECT id, dining_hall_id, name, category, sub_station, calories, protein, carbs, fat, portion
+       FROM menu_items
+       WHERE dining_hall_id = $1
+       ORDER BY category, sub_station, name`,
+      [diningHallId]
+    );
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching menu:', error);
@@ -115,15 +110,14 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
 // Log a meal
 app.post('/api/meal-logs', authenticateToken, async (req, res) => {
   try {
-    const { menuItemId, customName, calories, protein, carbs, fat, mealType, logDate, portion, hallName } = req.body;
+    const { menuItemId, mealType, logDate } = req.body;
     const userId = req.user.userId;
 
     const result = await pool.query(
-      `INSERT INTO meal_logs 
-      (user_id, menu_item_id, custom_name, calories, protein, carbs, fat, meal_type, log_date, portion, hall_name) 
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) 
-      RETURNING *`,
-      [userId, menuItemId, customName, calories, protein, carbs, fat, mealType, logDate, portion || null, hallName || null]
+      `INSERT INTO meal_logs (user_id, menu_item_id, meal_type, log_date)
+       VALUES ($1, $2, $3, $4)
+       RETURNING *`,
+      [userId, menuItemId || null, mealType, logDate]
     );
 
     res.status(201).json(result.rows[0]);
@@ -141,7 +135,8 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
     const result = await pool.query(
-      `SELECT ml.*, mi.name as menu_item_name, dh.name as dining_hall_name
+      `SELECT ml.*, mi.name as menu_item_name, mi.calories, mi.protein, mi.carbs, mi.fat, mi.portion,
+              dh.name as dining_hall_name
        FROM meal_logs ml
        LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
        LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
@@ -174,20 +169,22 @@ app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
   }
 });
 
-// Get daily totals
+// Get daily totals (pulled from menu_items via join)
 app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const { date } = req.query;
     const selectedDate = date || new Date().toISOString().split('T')[0];
+
     const result = await pool.query(
-      `SELECT 
-        COALESCE(SUM(calories), 0) as total_calories,
-        COALESCE(SUM(protein), 0) as total_protein,
-        COALESCE(SUM(carbs), 0) as total_carbs,
-        COALESCE(SUM(fat), 0) as total_fat
-       FROM meal_logs
-       WHERE user_id = $1 AND log_date = $2`,
+      `SELECT
+        COALESCE(SUM(mi.calories), 0) as total_calories,
+        COALESCE(SUM(mi.protein), 0) as total_protein,
+        COALESCE(SUM(mi.carbs), 0) as total_carbs,
+        COALESCE(SUM(mi.fat), 0) as total_fat
+       FROM meal_logs ml
+       LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
+       WHERE ml.user_id = $1 AND ml.log_date = $2`,
       [userId, selectedDate]
     );
     res.json(result.rows[0]);
@@ -202,13 +199,13 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const result = await pool.query(
-      `SELECT DISTINCT ON (COALESCE(ml.custom_name, mi.name))
-        ml.id, ml.custom_name, mi.name as menu_item_name, mi.id as menu_item_id,
-        ml.calories, ml.protein, ml.carbs, ml.fat, ml.created_at
+      `SELECT DISTINCT ON (mi.name)
+        ml.id, mi.name as menu_item_name, mi.id as menu_item_id,
+        mi.calories, mi.protein, mi.carbs, mi.fat, ml.created_at
        FROM meal_logs ml
        LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
        WHERE ml.user_id = $1
-       ORDER BY COALESCE(ml.custom_name, mi.name), ml.created_at DESC
+       ORDER BY mi.name, ml.created_at DESC
        LIMIT 20`,
       [userId]
     );
@@ -284,21 +281,8 @@ app.post('/api/feedback', authenticateToken, async (req, res) => {
   }
 });
 
-// ========== SCRAPING ENDPOINTS ==========
-
-app.post('/api/scrape-menus', authenticateToken, async (req, res) => {
-  try {
-    await scraper.scrapeAllMenus();
-    res.json({ message: 'Menus scraped successfully' });
-  } catch (error) {
-    console.error('Error scraping menus:', error);
-    res.status(500).json({ error: 'Scraping failed' });
-  }
-});
-
 // ========== START SERVER ==========
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log('📅 Menu scraping handled by GitHub Actions (runs daily at 6:00 AM EST)');
 });
