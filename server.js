@@ -152,23 +152,6 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
   }
 });
 
-// Delete a meal log
-app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.userId;
-    const result = await pool.query(
-      'DELETE FROM meal_logs WHERE id = $1 AND user_id = $2 RETURNING *',
-      [id, userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Meal log not found' });
-    res.json({ message: 'Meal log deleted', log: result.rows[0] });
-  } catch (error) {
-    console.error('Error deleting meal log:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
 // Get daily totals (pulled from menu_items via join)
 app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   try {
@@ -212,6 +195,23 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching recent meals:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Delete a meal log
+app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const result = await pool.query(
+      'DELETE FROM meal_logs WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Meal log not found' });
+    res.json({ message: 'Meal log deleted', log: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting meal log:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
