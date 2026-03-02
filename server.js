@@ -280,6 +280,27 @@ app.post('/api/feedback', authenticateToken, async (req, res) => {
     res.status(500).json({ error: 'Server error' });
   }
 });
+app.get('/api/menu-items/:menuItemId/options', authenticateToken, async (req, res) => {
+  try {
+    const { menuItemId } = req.params;
+    const groups = await pool.query(
+      `SELECT * FROM item_option_groups WHERE menu_item_id = $1 ORDER BY id`,
+      [menuItemId]
+    );
+    const options = await pool.query(
+      `SELECT * FROM item_options WHERE group_id = ANY($1) ORDER BY group_id, id`,
+      [groups.rows.map(g => g.id)]
+    );
+    const result = groups.rows.map(group => ({
+      ...group,
+      options: options.rows.filter(o => o.group_id === group.id)
+    }));
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching item options:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // ========== START SERVER ==========
 
