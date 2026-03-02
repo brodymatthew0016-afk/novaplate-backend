@@ -110,14 +110,14 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
 // Log a meal
 app.post('/api/meal-logs', authenticateToken, async (req, res) => {
   try {
-    const { menuItemId, mealType, logDate } = req.body;
+    const { menuItemId, mealType, logDate, servings, calories, protein, carbs, fat } = req.body;
     const userId = req.user.userId;
 
     const result = await pool.query(
-      `INSERT INTO meal_logs (user_id, menu_item_id, meal_type, log_date)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO meal_logs (user_id, menu_item_id, meal_type, log_date, servings, calories, protein, carbs, fat)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING *`,
-      [userId, menuItemId || null, mealType, logDate]
+      [userId, menuItemId || null, mealType, logDate, servings || 1, calories || null, protein || null, carbs || null, fat || null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -135,8 +135,13 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
     const result = await pool.query(
-      `SELECT ml.*, mi.name as menu_item_name, mi.calories, mi.protein, mi.carbs, mi.fat, mi.portion,
-              dh.name as dining_hall_name
+      `SELECT ml.*,
+              mi.name as menu_item_name,
+              COALESCE(ml.calories, mi.calories * COALESCE(ml.servings, 1)) as calories,
+              COALESCE(ml.protein, mi.protein * COALESCE(ml.servings, 1)) as protein,
+              COALESCE(ml.carbs, mi.carbs * COALESCE(ml.servings, 1)) as carbs,
+              COALESCE(ml.fat, mi.fat * COALESCE(ml.servings, 1)) as fat,
+              mi.portion, dh.name as dining_hall_name
        FROM meal_logs ml
        LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
        LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
@@ -161,10 +166,10 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT
-        COALESCE(SUM(mi.calories), 0) as total_calories,
-        COALESCE(SUM(mi.protein), 0) as total_protein,
-        COALESCE(SUM(mi.carbs), 0) as total_carbs,
-        COALESCE(SUM(mi.fat), 0) as total_fat
+        COALESCE(SUM(COALESCE(ml.calories, mi.calories * COALESCE(ml.servings, 1))), 0) as total_calories,
+        COALESCE(SUM(COALESCE(ml.protein, mi.protein * COALESCE(ml.servings, 1))), 0) as total_protein,
+        COALESCE(SUM(COALESCE(ml.carbs, mi.carbs * COALESCE(ml.servings, 1))), 0) as total_carbs,
+        COALESCE(SUM(COALESCE(ml.fat, mi.fat * COALESCE(ml.servings, 1))), 0) as total_fat
        FROM meal_logs ml
        LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
        WHERE ml.user_id = $1 AND ml.log_date = $2`,
