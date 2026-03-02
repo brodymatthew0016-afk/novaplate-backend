@@ -92,9 +92,11 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
     if (hallResult.rows.length === 0) return res.status(404).json({ error: 'Dining hall not found' });
 
     const result = await pool.query(
-      `SELECT id, dining_hall_id, name, category, sub_station, calories, protein, carbs, fat, portion, display_calories       FROM menu_items
-       WHERE dining_hall_id = $1
-       ORDER BY category, sub_station, name`,
+      `SELECT mi.id, mi.dining_hall_id, mi.name, mi.category, mi.sub_station, mi.calories, mi.protein, mi.carbs, mi.fat, mi.portion, mi.display_calories,
+              EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = mi.id) as has_options
+       FROM menu_items mi
+       WHERE mi.dining_hall_id = $1
+       ORDER BY mi.category, mi.sub_station, mi.name`,
       [diningHallId]
     );
     res.json(result.rows);
