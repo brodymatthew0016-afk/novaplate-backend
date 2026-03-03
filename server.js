@@ -136,11 +136,11 @@ app.post('/api/meal-logs', authenticateToken, async (req, res) => {
       if (menuItem.rows.length > 0) {
         const mi = menuItem.rows[0];
         await pool.query(
-          `INSERT INTO recent_meals (user_id, menu_item_id, menu_item_name, calories, protein, carbs, fat, last_logged_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+          `INSERT INTO recent_meals (user_id, menu_item_id, menu_item_name, calories, protein, carbs, fat, servings, last_logged_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
            ON CONFLICT (user_id, menu_item_id)
-           DO UPDATE SET last_logged_at = NOW(), calories = $4, protein = $5, carbs = $6, fat = $7`,
-          [userId, menuItemId, mi.name, calories || mi.calories, protein || mi.protein, carbs || mi.carbs, fat || mi.fat]
+           DO UPDATE SET last_logged_at = NOW(), calories = $4, protein = $5, carbs = $6, fat = $7, servings = $8`,
+          [userId, menuItemId, mi.name, calories || mi.calories, protein || mi.protein, carbs || mi.carbs, fat || mi.fat, servings || 1]
         );
       }
     }
@@ -213,9 +213,12 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
     const userId = req.user.userId;
     const result = await pool.query(
       `SELECT rm.id, rm.menu_item_name, rm.menu_item_id, rm.calories, rm.protein, rm.carbs, rm.fat,
-              rm.last_logged_at as created_at,
+              rm.last_logged_at as created_at, rm.servings,
+              mi.portion, mi.category, dh.name as dining_hall_name,
               EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = rm.menu_item_id) as has_options
        FROM recent_meals rm
+       LEFT JOIN menu_items mi ON rm.menu_item_id = mi.id
+       LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
        WHERE rm.user_id = $1
        ORDER BY rm.last_logged_at DESC
        LIMIT 20`,
