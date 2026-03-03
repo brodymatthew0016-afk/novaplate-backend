@@ -130,6 +130,21 @@ app.post('/api/meal-logs', authenticateToken, async (req, res) => {
       [userId, menuItemId || null, mealType, logDate, servings || 1, calories || null, protein || null, carbs || null, fat || null, optionsText || null]
     );
 
+    // Write to recent_meals (upsert so each item only appears once per user)
+    if (menuItemId) {
+      const menuItem = await pool.query('SELECT * FROM menu_items WHERE id = $1', [menuItemId]);
+      if (menuItem.rows.length > 0) {
+        const mi = menuItem.rows[0];
+        await pool.query(
+          `INSERT INTO recent_meals (user_id, menu_item_id, menu_item_name, calories, protein, carbs, fat, last_logged_at)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+           ON CONFLICT (user_id, menu_item_id)
+           DO UPDATE SET last_logged_at = NOW(), calories = $4, protein = $5, carbs = $6, fat = $7`,
+          [userId, menuItemId, mi.name, calories || mi.calories, protein || mi.protein, carbs || mi.carbs, fat || mi.fat]
+        );
+      }
+    }
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error logging meal:', error);
@@ -197,13 +212,12 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const result = await pool.query(
-      `SELECT DISTINCT ON (mi.name)
-        ml.id, mi.name as menu_item_name, mi.id as menu_item_id,
-        mi.calories, mi.protein, mi.carbs, mi.fat, ml.created_at
-       FROM meal_logs ml
-       LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
-       WHERE ml.user_id = $1
-       ORDER BY mi.name, ml.created_at DESC
+      `SELECT rm.id, rm.menu_item_name, rm.menu_item_id, rm.calories, rm.protein, rm.carbs, rm.fat,
+              rm.last_logged_at as created_at,
+              EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = rm.menu_item_id) as has_options
+       FROM recent_meals rm
+       WHERE rm.user_id = $1
+       ORDER BY rm.last_logged_at DESC
        LIMIT 20`,
       [userId]
     );
