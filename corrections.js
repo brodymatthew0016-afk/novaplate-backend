@@ -11,15 +11,7 @@ const CORRECTIONS = {
   // add more as you find them
 };
 
-const REPLACEMENTS = {
-  'Assorted Cereal': [
-    { name: 'Cheerios',         calories: 100, protein: 3, carbs: 20, fat: 2 },
-    { name: 'Frosted Flakes',   calories: 110, protein: 1, carbs: 26, fat: 0 },
-    { name: 'Raisin Bran',      calories: 190, protein: 5, carbs: 46, fat: 1 },
-    { name: 'Corn Flakes',      calories: 100, protein: 2, carbs: 24, fat: 0 },
-    { name: 'Lucky Charms',     calories: 110, protein: 2, carbs: 22, fat: 1 },
-    // add whatever Villanova actually stocks
-  ],
-};
+
+const REPLACEMENTS = {};
 
 module.exports = { CORRECTIONS, REPLACEMENTS };

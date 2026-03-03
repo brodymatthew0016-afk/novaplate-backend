@@ -25,6 +25,14 @@ const DINING_HALLS = [
   { scrapeId: 'st_marys_hall',        dbId: 3, name: 'St. Marys Hall' },
 ];
 
+
+// ─── BLOCKLIST ────────────────────────────────────────────────────────────────
+// Items replaced by static DB entries — scraper should skip these entirely
+const BLOCKLIST = [
+  'Assorted Cereal',
+  'Assorted Cereals',
+];
+
 // ─── DATE HELPERS ─────────────────────────────────────────────────────────────
 
 function getTodayEST() {
@@ -162,6 +170,12 @@ async function main() {
         let corrected = 0;
 
         for (const item of items) {
+          // Skip blocklisted items (replaced by static DB entries)
+          if (BLOCKLIST.some(b => b.toLowerCase() === item.name.toLowerCase())) {
+            console.log(`    🚫 Skipped (static): "${item.name}"`);
+            continue;
+          }
+
           // Handle replacements (e.g. "Assorted Cereal" → specific cereals)
           if (REPLACEMENTS[item.name]) {
             for (const replacement of REPLACEMENTS[item.name]) {
