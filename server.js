@@ -166,7 +166,7 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
               COALESCE(ml.protein, mi.protein * COALESCE(ml.servings, 1)) as protein,
               COALESCE(ml.carbs, mi.carbs * COALESCE(ml.servings, 1)) as carbs,
               COALESCE(ml.fat, mi.fat * COALESCE(ml.servings, 1)) as fat,
-              mi.portion, dh.name as dining_hall_name
+              mi.portion, mi.category, dh.name as dining_hall_name
        FROM meal_logs ml
        LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
        LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
