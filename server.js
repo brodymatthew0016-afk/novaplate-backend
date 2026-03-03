@@ -231,6 +231,23 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
   }
 });
 
+// Delete a recent meal
+app.delete('/api/recent-meals/:id', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.userId;
+    const result = await pool.query(
+      'DELETE FROM recent_meals WHERE id = $1 AND user_id = $2 RETURNING *',
+      [id, userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Recent meal not found' });
+    res.json({ message: 'Removed from recents' });
+  } catch (error) {
+    console.error('Error deleting recent meal:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // Delete a meal log
 app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
   try {
