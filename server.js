@@ -93,7 +93,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT mi.id, mi.dining_hall_id, mi.name, mi.category, mi.sub_station, mi.calories, mi.protein, mi.carbs, mi.fat,
-              mi.serving_size,
+              mi.serving_size, mi.est_calories, mi.est_protein, mi.est_carbs, mi.est_fat, mi.est_serving_size,
               COALESCE(ip.portion, mi.portion) as portion,
               COALESCE(
                 mi.display_calories,
