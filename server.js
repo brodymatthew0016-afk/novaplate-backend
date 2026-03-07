@@ -88,12 +88,16 @@ app.get('/api/dining-halls', authenticateToken, async (req, res) => {
 app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
     const { diningHallId } = req.params;
+    const { date } = req.query;
+    const selectedDate = date || new Date().toISOString().split('T')[0];
+
     const hallResult = await pool.query('SELECT * FROM dining_halls WHERE id = $1', [diningHallId]);
     if (hallResult.rows.length === 0) return res.status(404).json({ error: 'Dining hall not found' });
 
     const result = await pool.query(
       `SELECT mi.id, mi.dining_hall_id, mi.name, mi.category, mi.sub_station, mi.calories, mi.protein, mi.carbs, mi.fat,
               mi.serving_size, mi.est_calories, mi.est_protein, mi.est_carbs, mi.est_fat, mi.est_serving_size,
+              mi.meal_type, mi.date,
               COALESCE(ip.portion, mi.portion) as portion,
               COALESCE(
                 mi.display_calories,
@@ -107,9 +111,9 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
               EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = mi.id) as has_options
        FROM menu_items mi
        LEFT JOIN item_portions ip ON LOWER(mi.name) = LOWER(ip.name)
-       WHERE mi.dining_hall_id = $1
+       WHERE mi.dining_hall_id = $1 AND (mi.date = $2 OR mi.is_static = TRUE)
        ORDER BY mi.category, mi.sub_station, mi.name`,
-      [diningHallId]
+      [diningHallId, selectedDate]
     );
     res.json(result.rows);
   } catch (error) {

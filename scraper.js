@@ -1,8 +1,8 @@
 /**
- * NovaPlate — Database Scraper (v9)
+ * NovaPlate — Database Scraper (v8)
  * Uses direct POST requests to webapps.villanova.edu (JSON API)
- * v8: Fetches ingredients via JSON API.
- * v9: Batch LLM estimation of est_calories/protein/carbs/fat/serving_size via Groq.
+ * All nutrition data comes directly from the scrape — no LLM enrichment.
+ * v8: Now fetches ingredients from the per-item nutrition page.
  *
  * Run:
  *   node scraper.js              ← scrapes today + writes menu_dump_YYYY-MM-DD.xlsx
@@ -111,142 +111,6 @@ function getPage(path) {
   });
 }
 
-
-// ─── GROQ BATCH ESTIMATOR ────────────────────────────────────────────────────
-//
-// Sends all items for a meal in one API call.
-// Returns a map of itemName (lowercase) -> { est_calories, est_protein, est_carbs, est_fat, est_serving_size }
-
-const GROQ_CHUNK_SIZE = 20; // max items per Groq call to stay within token limits
-
-function groqRequest(apiKey, body) {
-  return new Promise((resolve) => {
-    const options = {
-      hostname: 'api.groq.com',
-      path: '/openai/v1/chat/completions',
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Length': Buffer.byteLength(body),
-      },
-    };
-    const req = https.request(options, res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
-    });
-    req.on('error', err => resolve(JSON.stringify({ _reqError: err.message })));
-    req.write(body);
-    req.end();
-  });
-}
-
-function parseRetryAfterMs(errorMessage) {
-  // Groq error messages say things like "Please try again in 4.06s" or "310ms"
-  const secMatch  = errorMessage.match(/try again in ([\d.]+)s/);
-  const msMatch   = errorMessage.match(/try again in ([\d.]+)ms/);
-  const minMatch  = errorMessage.match(/try again in ([\d.]+)m([\d.]+)s/);
-  if (minMatch)  return (parseFloat(minMatch[1]) * 60 + parseFloat(minMatch[2])) * 1000 + 500;
-  if (secMatch)  return parseFloat(secMatch[1]) * 1000 + 500;
-  if (msMatch)   return parseFloat(msMatch[1]) + 500;
-  return 10000; // default 10s
-}
-
-async function estimateNutritionChunk(items, apiKey) {
-  console.log('🧪 Sample ingredients being sent to Groq:', JSON.stringify(items.slice(0, 3).map(i => ({ name: i.name, ingredients: i.ingredients })), null, 2));
-
-  const itemLines = items.map((item, i) =>
-    `${i + 1}. Name: "${item.name}" | Ingredients: ${item.ingredients || 'unknown'}`
-  ).join('\n');
-
-  const prompt = `You are a nutrition expert. For each dining hall food item below, estimate the nutrition for a TYPICAL single dining hall serving portion.
-
-Items:
-${itemLines}
-
-Respond ONLY with a JSON array — no explanation, no markdown, no code fences. Each element must have exactly these keys:
-- "name": the exact item name as given
-- "est_calories": integer
-- "est_protein": integer (grams)
-- "est_carbs": integer (grams)
-- "est_fat": integer (grams)
-- "est_serving_size": string (e.g. "1 cup", "6 oz", "1 slice")
-
-Base estimates on the ingredients provided and typical dining hall portion sizes.`;
-
-  const body = JSON.stringify({
-    model: 'llama-3.1-8b-instant',
-    max_tokens: 8192,
-    temperature: 0.1,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  const MAX_RETRIES = 5;
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const data = await groqRequest(apiKey, body);
-    try {
-      const json = JSON.parse(data);
-
-      // Handle rate limit errors by waiting and retrying
-      if (json.error) {
-        const waitMs = parseRetryAfterMs(json.error.message || '');
-        console.log(`      ⏳ Rate limited — waiting ${(waitMs/1000).toFixed(1)}s then retrying (attempt ${attempt}/${MAX_RETRIES})...`);
-        await new Promise(r => setTimeout(r, waitMs));
-        continue;
-      }
-
-      const text = json.choices?.[0]?.message?.content || '';
-      const clean = text.replace(/```json|```/gi, '').trim();
-      const arr = JSON.parse(clean);
-      const map = {};
-      for (const entry of arr) {
-        map[entry.name.toLowerCase().trim()] = {
-          est_calories:     Math.round(entry.est_calories     || 0),
-          est_protein:      Math.round(entry.est_protein      || 0),
-          est_carbs:        Math.round(entry.est_carbs        || 0),
-          est_fat:          Math.round(entry.est_fat          || 0),
-          est_serving_size: entry.est_serving_size            || null,
-        };
-      }
-      return map;
-    } catch (err) {
-      console.log(`      ⚠️  Groq parse error (attempt ${attempt}): ${err.message}`);
-      if (attempt < MAX_RETRIES) await new Promise(r => setTimeout(r, 5000));
-    }
-  }
-
-  console.log(`      ⚠️  Chunk failed after ${MAX_RETRIES} attempts — skipping`);
-  return {};
-}
-
-async function estimateNutritionBatch(items) {
-  const apiKey = process.env.GROQ_API_KEY;
-  if (!apiKey) {
-    console.log('      ⚠️  GROQ_API_KEY not set — skipping LLM estimates');
-    return {};
-  }
-
-  // Split into chunks to avoid token limit
-  const chunks = [];
-  for (let i = 0; i < items.length; i += GROQ_CHUNK_SIZE) {
-    chunks.push(items.slice(i, i + GROQ_CHUNK_SIZE));
-  }
-
-  console.log(`      🤖 Sending ${chunks.length} chunk(s) of up to ${GROQ_CHUNK_SIZE} items to Groq...`);
-
-  // Run chunks sequentially to avoid Groq rate limits
-  const results = [];
-  for (let i = 0; i < chunks.length; i++) {
-    const result = await estimateNutritionChunk(chunks[i], apiKey);
-    results.push(result);
-    if (i < chunks.length - 1) await new Promise(r => setTimeout(r, 500));
-  }
-
-  // Merge all chunk maps into one
-  return Object.assign({}, ...results);
-}
-
 // ─── INGREDIENTS FETCHER ──────────────────────────────────────────────────────
 //
 // The nutrition popup URL is:
@@ -347,6 +211,7 @@ async function scrapeMeal(hallValue, mealValue, siteDate) {
           fat:          item.fat,
           serving_size: item.serving_size,
           ingredients:  ingredients,
+          _index:       extractItemIndex(item._raw),
         };
       })
   );
@@ -358,37 +223,29 @@ async function scrapeMeal(hallValue, mealValue, siteDate) {
 // ─── INSERT INTO DATABASE ─────────────────────────────────────────────────────
 
 async function insertItem(client, dbHallId, item, mealType, dbDate) {
+  // NOTE: your schema will need an `ingredients` column.
+  // If it doesn't exist yet, run:
+  //   ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS ingredients TEXT;
   await client.query(
     `INSERT INTO menu_items 
      (dining_hall_id, name, calories, protein, carbs, fat, meal_type, date,
-      is_static, category, sub_station, serving_size, ingredients,
-      est_calories, est_protein, est_carbs, est_fat, est_serving_size)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+      is_static, category, sub_station, serving_size, ingredients)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, $10, $11, $12)
      ON CONFLICT (dining_hall_id, name, meal_type, date) DO UPDATE SET
-       calories         = EXCLUDED.calories,
-       protein          = EXCLUDED.protein,
-       carbs            = EXCLUDED.carbs,
-       fat              = EXCLUDED.fat,
-       serving_size     = EXCLUDED.serving_size,
-       category         = COALESCE(EXCLUDED.category,         menu_items.category),
-       sub_station      = COALESCE(EXCLUDED.sub_station,      menu_items.sub_station),
-       ingredients      = COALESCE(EXCLUDED.ingredients,      menu_items.ingredients),
-       est_calories     = COALESCE(EXCLUDED.est_calories,     menu_items.est_calories),
-       est_protein      = COALESCE(EXCLUDED.est_protein,      menu_items.est_protein),
-       est_carbs        = COALESCE(EXCLUDED.est_carbs,        menu_items.est_carbs),
-       est_fat          = COALESCE(EXCLUDED.est_fat,          menu_items.est_fat),
-       est_serving_size = COALESCE(EXCLUDED.est_serving_size, menu_items.est_serving_size)`,
+       calories     = EXCLUDED.calories,
+       protein      = EXCLUDED.protein,
+       carbs        = EXCLUDED.carbs,
+       fat          = EXCLUDED.fat,
+       serving_size = EXCLUDED.serving_size,
+       category     = COALESCE(EXCLUDED.category,     menu_items.category),
+       sub_station  = COALESCE(EXCLUDED.sub_station,  menu_items.sub_station),
+       ingredients  = COALESCE(EXCLUDED.ingredients,  menu_items.ingredients)`,
     [dbHallId, item.name, item.calories, item.protein, item.carbs, item.fat,
      mealType, dbDate,
-     item.category         || null,
-     item.sub_station      || null,
-     item.serving_size     || null,
-     item.ingredients      || null,
-     item.est_calories     ?? null,
-     item.est_protein      ?? null,
-     item.est_carbs        ?? null,
-     item.est_fat          ?? null,
-     item.est_serving_size || null]
+     item.category    || null,
+     item.sub_station || null,
+     item.serving_size || null,
+     item.ingredients  || null]
   );
 }
 
@@ -412,21 +269,10 @@ async function scrapeDay(client, dateStr, ITEM_CATEGORIES) {
 
     for (const meal of MEALS) {
       const { items: rawItems, raw } = await scrapeMeal(hall.siteValue, meal, siteDate);
+      // Push enriched items (includes ingredients) for the Excel dump
+      allEnrichedItems.push(...rawItems.map(item => ({ ...item, _meal: meal })));
 
-      // Batch LLM estimation for all items in this meal
-      console.log(`      🤖 Estimating nutrition for ${rawItems.length} items...`);
-      const estimates = await estimateNutritionBatch(rawItems);
-
-      // Merge LLM estimates into items
-      const enrichedItems = rawItems.map(item => ({
-        ...item,
-        ...(estimates[item.name.toLowerCase().trim()] || {}),
-      }));
-
-      // Push enriched items (includes ingredients + est_ fields) for the Excel dump
-      allEnrichedItems.push(...enrichedItems.map(item => ({ ...item, _meal: meal })));
-
-      const filteredItems = enrichedItems.filter(item =>
+      const filteredItems = rawItems.filter(item =>
         !BLOCKLIST.some(b => b.toLowerCase() === item.name.toLowerCase())
       );
 
@@ -447,18 +293,7 @@ async function scrapeDay(client, dateStr, ITEM_CATEGORIES) {
     }
 
     if (allEnrichedItems.length > 0) {
-      const EXCEL_COLS = [
-        '_meal', 'name', 'course',
-        'serving_size', 'calories', 'protein', 'carbs', 'fat',
-        'est_serving_size', 'est_calories', 'est_protein', 'est_carbs', 'est_fat',
-        'ingredients',
-      ];
-      const cleanItems = allEnrichedItems.map(item => {
-        const row = {};
-        for (const col of EXCEL_COLS) row[col] = item[col] ?? null;
-        return row;
-      });
-      const ws = XLSX.utils.json_to_sheet(cleanItems, { header: EXCEL_COLS });
+      const ws = XLSX.utils.json_to_sheet(allEnrichedItems);
       XLSX.utils.book_append_sheet(wb, ws, hall.name.slice(0, 31));
     }
   }
