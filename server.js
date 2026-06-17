@@ -83,38 +83,71 @@ app.get('/api/dining-halls', authenticateToken, async (req, res) => {
   }
 });
 
+// ========== STATION ROUTES ==========
+
+app.get('/api/dining-halls/:diningHallId/stations', authenticateToken, async (req, res) => {
+  try {
+    const { diningHallId } = req.params;
+    const result = await pool.query(
+      'SELECT * FROM stations WHERE dining_hall_id = $1 ORDER BY name',
+      [diningHallId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching stations:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== MENU ROUTES ==========
 
 app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
     const { diningHallId } = req.params;
-    const { date } = req.query;
+    const { date, mealType } = req.query;
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
     const hallResult = await pool.query('SELECT * FROM dining_halls WHERE id = $1', [diningHallId]);
     if (hallResult.rows.length === 0) return res.status(404).json({ error: 'Dining hall not found' });
 
-    const result = await pool.query(
-      `SELECT mi.id, mi.dining_hall_id, mi.name, mi.category, mi.sub_station, mi.calories, mi.protein, mi.carbs, mi.fat,
-              mi.serving_size, mi.est_calories, mi.est_protein, mi.est_carbs, mi.est_fat, mi.est_serving_size,
-              mi.meal_type, mi.date,
-              COALESCE(ip.portion, mi.portion) as portion,
-              COALESCE(
-                mi.display_calories,
-                mi.calories + COALESCE((
-                  SELECT SUM(io.calories_delta)
-                  FROM item_options io
-                  JOIN item_option_groups iog ON io.group_id = iog.id
-                  WHERE iog.menu_item_id = mi.id AND io.is_default = true
-                ), 0)
-              ) as display_calories,
-              EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = mi.id) as has_options
-       FROM menu_items mi
-       LEFT JOIN item_portions ip ON LOWER(mi.name) = LOWER(ip.name)
-       WHERE mi.dining_hall_id = $1 AND (mi.date = $2 OR mi.is_static = TRUE)
-       ORDER BY mi.category, mi.sub_station, mi.name`,
-      [diningHallId, selectedDate]
-    );
+    let query = `
+      SELECT
+        mi.id,
+        mi.name,
+        mi.meal_type,
+        mi.is_customizable,
+        mi.is_active,
+        s.id as station_id,
+        s.name as station_name,
+        dh.id as dining_hall_id,
+        dh.name as dining_hall_name,
+        COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+        COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+        COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+        COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+        COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+        mi.nutrition_source,
+        mi.nutrition_status,
+        EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
+      FROM menu_items_master mi
+      JOIN stations s ON mi.station_id = s.id
+      JOIN dining_halls dh ON s.dining_hall_id = dh.id
+      JOIN daily_schedule ds ON ds.menu_item_id = mi.id
+      WHERE dh.id = $1
+        AND ds.date = $2
+        AND mi.is_active = true
+    `;
+
+    const params = [diningHallId, selectedDate];
+
+    if (mealType) {
+      query += ` AND (mi.meal_type = $3 OR mi.meal_type = 'all')`;
+      params.push(mealType);
+    }
+
+    query += ` ORDER BY s.name, mi.name`;
+
+    const result = await pool.query(query, params);
     res.json(result.rows);
   } catch (error) {
     console.error('Error fetching menu:', error);
@@ -122,9 +155,31 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   }
 });
 
+// Get options for a menu item
+app.get('/api/menu-items/:menuItemId/options', authenticateToken, async (req, res) => {
+  try {
+    const { menuItemId } = req.params;
+    const groups = await pool.query(
+      'SELECT * FROM option_groups WHERE menu_item_id = $1 ORDER BY id',
+      [menuItemId]
+    );
+    const options = await pool.query(
+      'SELECT * FROM options WHERE group_id = ANY($1) ORDER BY group_id, id',
+      [groups.rows.map(g => g.id)]
+    );
+    const result = groups.rows.map(group => ({
+      ...group,
+      options: options.rows.filter(o => o.group_id === group.id)
+    }));
+    res.json(result);
+  } catch (error) {
+    console.error('Error fetching item options:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== MEAL LOG ROUTES ==========
 
-// Log a meal
 app.post('/api/meal-logs', authenticateToken, async (req, res) => {
   try {
     const { menuItemId, mealType, logDate, servings, calories, protein, carbs, fat, optionsText } = req.body;
@@ -137,21 +192,6 @@ app.post('/api/meal-logs', authenticateToken, async (req, res) => {
       [userId, menuItemId || null, mealType, logDate, servings || 1, calories || null, protein || null, carbs || null, fat || null, optionsText || null]
     );
 
-    // Write to recent_meals (upsert so each item only appears once per user)
-    if (menuItemId) {
-      const menuItem = await pool.query('SELECT * FROM menu_items WHERE id = $1', [menuItemId]);
-      if (menuItem.rows.length > 0) {
-        const mi = menuItem.rows[0];
-        await pool.query(
-          `INSERT INTO recent_meals (user_id, menu_item_id, menu_item_name, calories, protein, carbs, fat, servings, last_logged_at)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW())
-           ON CONFLICT (user_id, menu_item_id)
-           DO UPDATE SET last_logged_at = NOW(), calories = $4, protein = $5, carbs = $6, fat = $7, servings = $8`,
-          [userId, menuItemId, mi.name, calories || mi.calories, protein || mi.protein, carbs || mi.carbs, fat || mi.fat, servings || 1]
-        );
-      }
-    }
-
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Error logging meal:', error);
@@ -159,7 +199,6 @@ app.post('/api/meal-logs', authenticateToken, async (req, res) => {
   }
 });
 
-// Get meal logs for a specific date
 app.get('/api/meal-logs', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -167,16 +206,19 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
     const selectedDate = date || new Date().toISOString().split('T')[0];
 
     const result = await pool.query(
-      `SELECT ml.*,
-              mi.name as menu_item_name,
-              COALESCE(ml.calories, mi.calories * COALESCE(ml.servings, 1)) as calories,
-              COALESCE(ml.protein, mi.protein * COALESCE(ml.servings, 1)) as protein,
-              COALESCE(ml.carbs, mi.carbs * COALESCE(ml.servings, 1)) as carbs,
-              COALESCE(ml.fat, mi.fat * COALESCE(ml.servings, 1)) as fat,
-              mi.portion, mi.category, dh.name as dining_hall_name
+      `SELECT
+        ml.*,
+        mi.name as menu_item_name,
+        s.name as station_name,
+        dh.name as dining_hall_name,
+        COALESCE(ml.calories, COALESCE(mi.override_calories, mi.scraped_calories) * COALESCE(ml.servings, 1)) as calories,
+        COALESCE(ml.protein, COALESCE(mi.override_protein, mi.scraped_protein) * COALESCE(ml.servings, 1)) as protein,
+        COALESCE(ml.carbs, COALESCE(mi.override_carbs, mi.scraped_carbs) * COALESCE(ml.servings, 1)) as carbs,
+        COALESCE(ml.fat, COALESCE(mi.override_fat, mi.scraped_fat) * COALESCE(ml.servings, 1)) as fat
        FROM meal_logs ml
-       LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
-       LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
+       LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
+       LEFT JOIN stations s ON mi.station_id = s.id
+       LEFT JOIN dining_halls dh ON s.dining_hall_id = dh.id
        WHERE ml.user_id = $1 AND ml.log_date = $2
        ORDER BY ml.created_at`,
       [userId, selectedDate]
@@ -189,7 +231,6 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
   }
 });
 
-// Get daily totals (pulled from menu_items via join)
 app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
@@ -198,12 +239,12 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
 
     const result = await pool.query(
       `SELECT
-        COALESCE(SUM(COALESCE(ml.calories, mi.calories * COALESCE(ml.servings, 1))), 0) as total_calories,
-        COALESCE(SUM(COALESCE(ml.protein, mi.protein * COALESCE(ml.servings, 1))), 0) as total_protein,
-        COALESCE(SUM(COALESCE(ml.carbs, mi.carbs * COALESCE(ml.servings, 1))), 0) as total_carbs,
-        COALESCE(SUM(COALESCE(ml.fat, mi.fat * COALESCE(ml.servings, 1))), 0) as total_fat
+        COALESCE(SUM(COALESCE(ml.calories, COALESCE(mi.override_calories, mi.scraped_calories) * COALESCE(ml.servings, 1))), 0) as total_calories,
+        COALESCE(SUM(COALESCE(ml.protein, COALESCE(mi.override_protein, mi.scraped_protein) * COALESCE(ml.servings, 1))), 0) as total_protein,
+        COALESCE(SUM(COALESCE(ml.carbs, COALESCE(mi.override_carbs, mi.scraped_carbs) * COALESCE(ml.servings, 1))), 0) as total_carbs,
+        COALESCE(SUM(COALESCE(ml.fat, COALESCE(mi.override_fat, mi.scraped_fat) * COALESCE(ml.servings, 1))), 0) as total_fat
        FROM meal_logs ml
-       LEFT JOIN menu_items mi ON ml.menu_item_id = mi.id
+       LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
        WHERE ml.user_id = $1 AND ml.log_date = $2`,
       [userId, selectedDate]
     );
@@ -214,48 +255,6 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   }
 });
 
-// Get recently logged unique meals
-app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const result = await pool.query(
-      `SELECT rm.id, rm.menu_item_name, rm.menu_item_id, rm.calories, rm.protein, rm.carbs, rm.fat,
-              rm.last_logged_at as created_at, rm.servings,
-              mi.portion, mi.category, dh.name as dining_hall_name,
-              EXISTS(SELECT 1 FROM item_option_groups iog WHERE iog.menu_item_id = rm.menu_item_id) as has_options
-       FROM recent_meals rm
-       LEFT JOIN menu_items mi ON rm.menu_item_id = mi.id
-       LEFT JOIN dining_halls dh ON mi.dining_hall_id = dh.id
-       WHERE rm.user_id = $1
-       ORDER BY rm.last_logged_at DESC
-       LIMIT 20`,
-      [userId]
-    );
-    res.json(result.rows);
-  } catch (error) {
-    console.error('Error fetching recent meals:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Delete a recent meal
-app.delete('/api/recent-meals/:id', authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    const userId = req.user.userId;
-    const result = await pool.query(
-      'DELETE FROM recent_meals WHERE id = $1 AND user_id = $2 RETURNING *',
-      [id, userId]
-    );
-    if (result.rows.length === 0) return res.status(404).json({ error: 'Recent meal not found' });
-    res.json({ message: 'Removed from recents' });
-  } catch (error) {
-    console.error('Error deleting recent meal:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// Delete a meal log
 app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
@@ -299,61 +298,6 @@ app.put('/api/user/goal', authenticateToken, async (req, res) => {
     res.json({ daily_calorie_goal: result.rows[0].daily_calorie_goal });
   } catch (error) {
     console.error('Error updating calorie goal:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// ========== FEEDBACK ROUTES ==========
-
-app.post('/api/feedback', authenticateToken, async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const { feedbackText, feedbackType } = req.body;
-    const result = await pool.query(
-      'INSERT INTO feedback (user_id, feedback_text, feedback_type) VALUES ($1, $2, $3) RETURNING *',
-      [userId, feedbackText, feedbackType]
-    );
-    const userResult = await pool.query('SELECT email FROM users WHERE id = $1', [userId]);
-    const userEmail = userResult.rows[0]?.email || 'unknown';
-    try {
-      const axios = require('axios');
-      const FormData = require('form-data');
-      const GOOGLE_FORM_ID = '1FAIpQLScQPTt23NbQ1Nrty007ZRFs9mFCHk-goAilKITl5_Hfd4CDcg';
-      const formData = new FormData();
-      formData.append('entry.1176347361', userEmail);
-      formData.append('entry.2069532797', feedbackType);
-      formData.append('entry.843023838', feedbackText);
-      await axios.post(`https://docs.google.com/forms/d/e/${GOOGLE_FORM_ID}/formResponse`, formData, {
-        headers: formData.getHeaders(), validateStatus: () => true
-      });
-      console.log('✅ Feedback submitted to Google Form');
-    } catch (googleError) {
-      console.error('Error submitting to Google Form:', googleError.message);
-    }
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error('Error submitting feedback:', error);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-app.get('/api/menu-items/:menuItemId/options', authenticateToken, async (req, res) => {
-  try {
-    const { menuItemId } = req.params;
-    const groups = await pool.query(
-      `SELECT * FROM item_option_groups WHERE menu_item_id = $1 ORDER BY id`,
-      [menuItemId]
-    );
-    const options = await pool.query(
-      `SELECT * FROM item_options WHERE group_id = ANY($1) ORDER BY group_id, id`,
-      [groups.rows.map(g => g.id)]
-    );
-    const result = groups.rows.map(group => ({
-      ...group,
-      options: options.rows.filter(o => o.group_id === group.id)
-    }));
-    res.json(result);
-  } catch (error) {
-    console.error('Error fetching item options:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });

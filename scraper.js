@@ -1,14 +1,34 @@
 /**
- * NovaPlate — Database Scraper (v8)
- * Uses direct POST requests to webapps.villanova.edu (JSON API)
- * All nutrition data comes directly from the scrape — no LLM enrichment.
- * v8: Now fetches ingredients from the per-item nutrition page.
+ * NovaPlate — Database Scraper (v9 — Nutrislice edition)
+ * Pulls menu + nutrition data from Villanova's Nutrislice site:
+ *   https://villanovauniversity.nutrislice.com/menu/<hall-slug>/<meal-slug>/<YYYY-MM-DD>
+ * via its underlying JSON API:
+ *   https://villanovauniversity.api.nutrislice.com/menu/api/weeks/school/<hall-slug>/menu-type/<meal-slug>/<YYYY>/<MM>/<DD>/
+ *
+ * Replaces the old webapps.villanova.edu scraper entirely. No LLM enrichment —
+ * everything (name, calories, macros, serving size, ingredients) comes straight
+ * from the Nutrislice response.
  *
  * Run:
  *   node scraper.js              ← scrapes today + writes menu_dump_YYYY-MM-DD.xlsx
  *   node scraper.js 2026-02-23   ← scrapes specific date
  *   node scraper.js --analyze    ← scrapes last 35 days, writes menu_analysis.xlsx
  *                                   (does NOT insert into DB)
+ *
+ * Debugging:
+ *   DEBUG_FIELDS=1 node scraper.js   ← logs the raw shape of the first menu_item
+ *                                       and first food object seen, so field-name
+ *                                       mismatches are easy to spot and fix.
+ *
+ * IMPORTANT — verify before relying on this in production:
+ * Nutrislice's exact JSON field names vary slightly between deployments/versions.
+ * This scraper defensively tries several known field-name variants (see
+ * `pickNutrition` / `pickField` below), but it has NOT been verified against a
+ * live response from villanovauniversity.api.nutrislice.com (that host isn't
+ * reachable from this environment). Run with DEBUG_FIELDS=1 on the first run
+ * and check the console output against what actually comes back — if any
+ * values look wrong/missing, send me that debug output and I'll adjust the
+ * field mappings in one pass.
  */
 
 require('dotenv').config();
@@ -22,14 +42,34 @@ const pool = new Pool({
 });
 
 // ─── DINING HALL CONFIG ───────────────────────────────────────────────────────
+//
+// `slug` = the path segment Nutrislice uses, e.g.
+//   https://villanovauniversity.nutrislice.com/menu/dougherty-hall/dinner/2026-06-17
+//                                                     ^^^^^^^^^^^^^ this is the slug
+//
+// Confirmed from the URL you gave me: 'dougherty-hall'.
+// Donahue + St. Mary's slugs below are my best guess based on Nutrislice's usual
+// "<name>-hall" pattern and Villanova's own naming — PLEASE VERIFY by visiting
+// https://villanovauniversity.nutrislice.com and checking the dropdown / URL for
+// each hall, then fix here if needed. Easiest way: open the site, click each hall,
+// and copy whatever appears after /menu/ in the address bar.
 
 const DINING_HALLS = [
-  { siteValue: 'ST MARYS HALL',  dbId: 3, name: 'St. Marys Hall'  },
-  { siteValue: 'DOUGHERTY HALL', dbId: 2, name: 'Dougherty Hall'  },
-  { siteValue: 'DONAHUE COURT',  dbId: 1, name: 'Donahue Court'   },
+  { slug: 'dougherty-hall', dbId: 2, name: 'Dougherty Hall' },
+  { slug: 'donahue-hall',   dbId: 1, name: 'Donahue Court'  }, // GUESS — verify
+  { slug: 'st-marys-hall',  dbId: 3, name: 'St. Marys Hall' }, // GUESS — verify
 ];
 
-const MEALS = ['Breakfast', 'Lunch', 'Dinner'];
+// Nutrislice "menu-type" slugs. These are usually just lowercase meal names,
+// confirmed for dinner via your URL. Breakfast/lunch follow the same pattern
+// on virtually every Nutrislice deployment, but verify if either comes back empty.
+const MEALS = [
+  { slug: 'breakfast', label: 'Breakfast' },
+  { slug: 'lunch',     label: 'Lunch'     },
+  { slug: 'dinner',    label: 'Dinner'    },
+];
+
+const NUTRISLICE_HOST = 'villanovauniversity.api.nutrislice.com';
 
 // ─── BLOCKLIST ────────────────────────────────────────────────────────────────
 
@@ -48,11 +88,6 @@ function getTodayEST() {
   return `${y}-${m}-${d}`;
 }
 
-function toSiteDate(dateStr) {
-  const [y, m, d] = dateStr.split('-');
-  return `${m}/${d}/${y}`;
-}
-
 function getLastNDates(n) {
   const dates = [];
   const today = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/New_York' }));
@@ -67,167 +102,191 @@ function getLastNDates(n) {
   return dates;
 }
 
-// ─── HTTP HELPERS ─────────────────────────────────────────────────────────────
+// ─── HTTP HELPER ──────────────────────────────────────────────────────────────
 
-function postForm(path, fields) {
+function getJSON(path) {
   return new Promise((resolve, reject) => {
-    const body = new URLSearchParams(fields).toString();
     const options = {
-      hostname: 'webapps.villanova.edu',
+      hostname: NUTRISLICE_HOST,
       path,
-      method: 'POST',
+      method: 'GET',
       headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        'Content-Length': Buffer.byteLength(body),
-        'User-Agent': 'Mozilla/5.0',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+        'Accept': 'application/json',
       },
     };
     const req = https.request(options, res => {
       let data = '';
       res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
-    });
-    req.on('error', reject);
-    req.write(body);
-    req.end();
-  });
-}
-
-function getPage(path) {
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'webapps.villanova.edu',
-      path,
-      method: 'GET',
-      headers: { 'User-Agent': 'Mozilla/5.0' },
-    };
-    const req = https.request(options, res => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
+      res.on('end', () => {
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error(`HTTP ${res.statusCode} for ${path}`));
+        }
+        try {
+          resolve(JSON.parse(data));
+        } catch (err) {
+          reject(new Error(`JSON parse failed for ${path}: ${err.message}`));
+        }
+      });
     });
     req.on('error', reject);
     req.end();
   });
-}
-
-// ─── INGREDIENTS FETCHER ──────────────────────────────────────────────────────
-//
-// The nutrition popup URL is:
-//   webapps.villanova.edu/dininghallmenu/nutrition.htm?template=no&index=<N>
-//
-// The raw menu API response includes a field that maps to this index.
-// Common field names seen in Villanova's API: `menuItemIndex`, `index`, `itemIndex`, `id`.
-// We try them all and fall back to null if none are present.
-//
-// The HTML contains a paragraph like:
-//   <p>Marinade Chix Slmn Paneer, Boneless Skinless Chicken Thighs</p>
-// immediately after the <h2>Ingredients</h2> heading.
-
-function extractItemIndex(rawItem) {
-  // Try the most likely field names the API might use for the nutrition page index
-  return rawItem.menuItemIndex
-      ?? rawItem.itemIndex
-      ?? rawItem.index
-      ?? rawItem.menuIndex
-      ?? rawItem.id
-      ?? rawItem.itemId
-      ?? null;
 }
 
 /**
- * Given a numeric index, fetches the nutrition page and returns the
- * ingredients string, or null if not found / on any error.
+ * Builds the Nutrislice weekly-menu API path for a given hall/meal/date.
+ * Nutrislice always returns the *whole week* containing the requested date —
+ * we filter down to the single day we want after fetching.
  */
-async function fetchIngredients(id) {
-  if (id === null || id === undefined) return null;
-
-  try {
-    const raw = await postForm('/dininghallmenu/form_confirmation_proxy.jsp?template=no', {
-      command: 'Ingredients',
-      id: id,
-    });
-
-    const parsed = JSON.parse(raw.trim());
-    const arr = parsed.ingredients;
-    if (!arr || !arr.length) return null;
-    return arr.join(', ');
-  } catch {
-    return null;
-  }
+function weekApiPath(hallSlug, mealSlug, dateStr) {
+  const [y, m, d] = dateStr.split('-');
+  return `/menu/api/weeks/school/${hallSlug}/menu-type/${mealSlug}/${y}/${m}/${d}/`;
 }
 
-// ─── SCRAPE ONE MEAL ──────────────────────────────────────────────────────────
+// ─── FIELD EXTRACTION HELPERS ──────────────────────────────────────────────────
+//
+// Nutrislice nutrition fields have been observed under a few different key
+// names depending on deployment/version. We try each in order and take the
+// first defined value. If DEBUG_FIELDS=1, we log the raw keys we saw so any
+// missing mapping is obvious and easy to add.
 
-async function scrapeMeal(hallValue, mealValue, siteDate) {
-  console.log(`    🔄 ${hallValue} — ${mealValue} — ${siteDate}`);
+function pickField(obj, candidates, fallback = null) {
+  if (!obj) return fallback;
+  for (const key of candidates) {
+    if (obj[key] !== undefined && obj[key] !== null && obj[key] !== '') {
+      return obj[key];
+    }
+  }
+  return fallback;
+}
 
-  const raw = await postForm('/dininghallmenu/form_confirmation_proxy.jsp?template=no', {
-    command: 'Menu',
-    hall: hallValue,
-    date: siteDate,
-    meal: mealValue,
-  });
+function pickNutrition(food) {
+  // Most Nutrislice deployments nest nutrition under `rounded_nutrition_info`
+  // (preferred — pre-rounded for display) and fall back to `nutrition_info`.
+  const nutrition = food.rounded_nutrition_info || food.nutrition_info || food;
 
-  let parsed;
+  return {
+    calories: round(pickField(nutrition, ['calories', 'g_calories'], 0)),
+    protein:  round(pickField(nutrition, ['g_protein', 'protein'], 0)),
+    carbs:    round(pickField(nutrition, ['g_carbs', 'g_carbohydrate', 'carbohydrate', 'carbs'], 0)),
+    fat:      round(pickField(nutrition, ['g_fat', 'fat'], 0)),
+  };
+}
+
+function round(val) {
+  const n = parseFloat(val);
+  return Number.isFinite(n) ? Math.round(n) : 0;
+}
+
+function servingSize(food) {
+  const amount = pickField(food, ['serving_size_amount']);
+  const unit   = pickField(food, ['serving_size_unit', 'serving_size']);
+  if (amount && unit) return `${amount} ${unit}`;
+  if (unit) return String(unit);
+  return null;
+}
+
+function extractIngredients(food) {
+  // Observed as a plain string field on the food object in most deployments.
+  const raw = pickField(food, ['ingredients']);
+  if (!raw) return null;
+  return String(raw).replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Pulls a station/category label for a menu item. Nutrislice groups items
+ * within a day's menu_items array using a station/section reference — the
+ * exact field varies (`food.category_name`, item-level `station_name` /
+ * `menu_section`, or a separate `stations`/`sections` array keyed by id).
+ * This tries the common flat fields; if your response groups stations
+ * differently (e.g. a parallel `days[].menu_items` entries with
+ * `is_section_title: true` headers), run with DEBUG_FIELDS=1 and send me
+ * the structure so I can adjust this function specifically.
+ */
+function extractStation(item, food) {
+  return pickField(item, ['station_name', 'menu_section', 'section_name'])
+      || pickField(food, ['category_name', 'food_category'])
+      || 'Other';
+}
+
+// ─── PARSE ONE DAY'S MENU ITEMS FROM A WEEK RESPONSE ──────────────────────────
+
+function findDayInWeek(weekResponse, dateStr) {
+  const days = weekResponse?.days || [];
+  return days.find(d => d.date === dateStr) || null;
+}
+
+function parseMenuItems(day, debugLabel) {
+  const rawItems = day?.menu_items || [];
+
+  if (process.env.DEBUG_FIELDS && rawItems.length > 0) {
+    const firstWithFood = rawItems.find(i => i.food) || rawItems[0];
+    console.log(`      🔑 [${debugLabel}] raw menu_item keys:`, Object.keys(firstWithFood).join(', '));
+    if (firstWithFood.food) {
+      console.log(`      🔑 [${debugLabel}] raw food keys:`, Object.keys(firstWithFood.food).join(', '));
+      const nutrObj = firstWithFood.food.rounded_nutrition_info || firstWithFood.food.nutrition_info;
+      if (nutrObj) {
+        console.log(`      🔑 [${debugLabel}] raw nutrition keys:`, Object.keys(nutrObj).join(', '));
+      }
+    }
+  }
+
+  const items = [];
+  for (const item of rawItems) {
+    const food = item.food;
+    // Section headers / text-only rows have no `food` object — skip them.
+    if (!food || !food.name) continue;
+    if (food.name.length < 2) continue;
+
+    const { calories, protein, carbs, fat } = pickNutrition(food);
+
+    items.push({
+      name:         food.name,
+      station:      extractStation(item, food),
+      calories,
+      protein,
+      carbs,
+      fat,
+      serving_size: servingSize(food),
+      ingredients:  extractIngredients(food),
+    });
+  }
+  return items;
+}
+
+// ─── SCRAPE ONE MEAL (ONE HALL, ONE MEAL TYPE, ONE DATE) ──────────────────────
+
+async function scrapeMeal(hallSlug, meal, dateStr) {
+  console.log(`    🔄 ${hallSlug} — ${meal.label} — ${dateStr}`);
+
+  let weekResponse;
   try {
-    parsed = JSON.parse(raw.trim());
-  } catch {
-    console.log(`      ⚠️  Failed to parse response`);
-    return { items: [], raw: [] };
+    weekResponse = await getJSON(weekApiPath(hallSlug, meal.slug, dateStr));
+  } catch (err) {
+    console.log(`      ⚠️  Failed to fetch/parse: ${err.message}`);
+    return [];
   }
 
-  const rawItems = parsed.menu || [];
-
-  // Log the first raw item's keys once so we can verify the index field name
-  if (rawItems.length > 0 && process.env.DEBUG_FIELDS) {
-    console.log('      🔑 Raw item keys:', Object.keys(rawItems[0]).join(', '));
+  const day = findDayInWeek(weekResponse, dateStr);
+  if (!day) {
+    console.log(`      ⚠️  No day entry found for ${dateStr} in week response`);
+    return [];
   }
 
-  const items = await Promise.all(
-    rawItems
-      .map(item => ({
-        _raw:         item,
-        name:         item.itemName,
-        course:       item.course        || 'Other',
-        calories:     Math.round(item.calories     || 0),
-        protein:      Math.round(item.protein      || 0),
-        carbs:        Math.round(item.carbohydrate || 0),
-        fat:          Math.round(item.fat          || 0),
-        serving_size: item.portion       || null,
-      }))
-      .filter(item => item.name && item.name.length >= 2)
-      .map(async item => {
-        const index = extractItemIndex(item._raw);
-        const ingredients = await fetchIngredients(index);
-        // small delay to be polite to the server
-        await new Promise(r => setTimeout(r, 100));
-        return {
-          name:         item.name,
-          course:       item.course,
-          calories:     item.calories,
-          protein:      item.protein,
-          carbs:        item.carbs,
-          fat:          item.fat,
-          serving_size: item.serving_size,
-          ingredients:  ingredients,
-          _index:       extractItemIndex(item._raw),
-        };
-      })
-  );
-
+  const items = parseMenuItems(day, `${hallSlug}/${meal.slug}`);
   console.log(`      📋 ${items.length} items found`);
-  return { items, raw: rawItems.map(r => ({ ...r, _meal: mealValue })) };
+  return items;
 }
 
 // ─── INSERT INTO DATABASE ─────────────────────────────────────────────────────
 
 async function insertItem(client, dbHallId, item, mealType, dbDate) {
-  // NOTE: your schema will need an `ingredients` column.
-  // If it doesn't exist yet, run:
+  // NOTE: schema needs `ingredients` and `category`/`sub_station` columns.
+  // If they don't exist yet, run:
   //   ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS ingredients TEXT;
   await client.query(
-    `INSERT INTO menu_items 
+    `INSERT INTO menu_items
      (dining_hall_id, name, calories, protein, carbs, fat, meal_type, date,
       is_static, category, sub_station, serving_size, ingredients)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, false, $9, $10, $11, $12)
@@ -252,7 +311,6 @@ async function insertItem(client, dbHallId, item, mealType, dbDate) {
 // ─── SCRAPE ONE DAY (normal mode) ─────────────────────────────────────────────
 
 async function scrapeDay(client, dateStr, ITEM_CATEGORIES) {
-  const siteDate = toSiteDate(dateStr);
   console.log(`\n📅 Scraping ${dateStr}`);
 
   const wb = XLSX.utils.book_new();
@@ -265,12 +323,11 @@ async function scrapeDay(client, dateStr, ITEM_CATEGORIES) {
       [hall.dbId, dateStr]
     );
 
-    const allEnrichedItems = [];
+    const allItemsForDump = [];
 
     for (const meal of MEALS) {
-      const { items: rawItems, raw } = await scrapeMeal(hall.siteValue, meal, siteDate);
-      // Push enriched items (includes ingredients) for the Excel dump
-      allEnrichedItems.push(...rawItems.map(item => ({ ...item, _meal: meal })));
+      const rawItems = await scrapeMeal(hall.slug, meal, dateStr);
+      allItemsForDump.push(...rawItems.map(item => ({ ...item, _meal: meal.label })));
 
       const filteredItems = rawItems.filter(item =>
         !BLOCKLIST.some(b => b.toLowerCase() === item.name.toLowerCase())
@@ -278,22 +335,24 @@ async function scrapeDay(client, dateStr, ITEM_CATEGORIES) {
 
       let inserted = 0;
       for (const item of filteredItems) {
-        let finalItem = { ...item, category: item.course };
+        // `station` from Nutrislice becomes the default category;
+        // manual overrides from item_categories still take priority.
+        let finalItem = { ...item, category: item.station, sub_station: null };
         const override = ITEM_CATEGORIES[finalItem.name];
         if (override) {
           if (override.category)    finalItem.category    = override.category;
           if (override.sub_station) finalItem.sub_station = override.sub_station;
         }
-        await insertItem(client, hall.dbId, finalItem, meal, dateStr);
+        await insertItem(client, hall.dbId, finalItem, meal.label, dateStr);
         inserted++;
       }
 
-      console.log(`      ✅ ${meal}: ${inserted} inserted`);
-      await new Promise(r => setTimeout(r, 300));
+      console.log(`      ✅ ${meal.label}: ${inserted} inserted`);
+      await new Promise(r => setTimeout(r, 200));
     }
 
-    if (allEnrichedItems.length > 0) {
-      const ws = XLSX.utils.json_to_sheet(allEnrichedItems);
+    if (allItemsForDump.length > 0) {
+      const ws = XLSX.utils.json_to_sheet(allItemsForDump);
       XLSX.utils.book_append_sheet(wb, ws, hall.name.slice(0, 31));
     }
   }
@@ -309,44 +368,30 @@ async function analyzeMode() {
   const dates = getLastNDates(35);
   console.log(`\n🔍 Analyze mode — scraping ${dates.length} days (no DB writes)\n`);
 
-  const seen  = new Map(); // itemName.lower -> first seen record
+  const seen = new Map(); // itemName.lower -> first seen record
 
   for (const dateStr of dates) {
-    const siteDate = toSiteDate(dateStr);
     console.log(`\n📅 ${dateStr}`);
 
     for (const hall of DINING_HALLS) {
       for (const meal of MEALS) {
-        const { items, raw } = await scrapeMeal(hall.siteValue, meal, siteDate);
+        const items = await scrapeMeal(hall.slug, meal, dateStr);
 
-        // items now includes ingredients; raw still holds the full API payload
-        for (let i = 0; i < raw.length; i++) {
-          const item = raw[i];
-          if (!item.itemName) continue;
-          const key = item.itemName.toLowerCase().trim();
+        for (const item of items) {
+          const key = item.name.toLowerCase().trim();
           if (!seen.has(key)) {
-            // Find the matching enriched item (same name) to get ingredients
-            const enriched = items.find(
-              it => it.name.toLowerCase().trim() === key
-            );
             seen.set(key, {
-              itemName:      item.itemName,
-              portion:       item.portion        || '',
-              calories:      parseFloat(item.calories      || 0).toFixed(1),
-              protein:       parseFloat(item.protein       || 0).toFixed(1),
-              carbs:         parseFloat(item.carbohydrate  || 0).toFixed(1),
-              fat:           parseFloat(item.fat           || 0).toFixed(1),
-              saturatedFat:  parseFloat(item.saturatedFat  || 0).toFixed(1),
-              sodium:        parseFloat(item.sodium        || 0).toFixed(1),
-              fiber:         parseFloat(item.fiber         || 0).toFixed(1),
-              course:        item.course         || '',
-              allergens:     item.allergens      || '',
-              vegan:         item.vegan          ? 'Yes' : 'No',
-              vegetarian:    item.vegitarian      ? 'Yes' : 'No',
-              ingredients:   enriched?.ingredients || '',   // ← NEW
-              firstDate:     dateStr,
-              firstHall:     hall.name,
-              firstMeal:     meal,
+              itemName:    item.name,
+              station:     item.station,
+              calories:    item.calories,
+              protein:     item.protein,
+              carbs:       item.carbs,
+              fat:         item.fat,
+              servingSize: item.serving_size || '',
+              ingredients: item.ingredients || '',
+              firstDate:   dateStr,
+              firstHall:   hall.name,
+              firstMeal:   meal.label,
             });
           }
         }
@@ -356,14 +401,13 @@ async function analyzeMode() {
   }
 
   const allItems = Array.from(seen.values())
-    .sort((a, b) => parseFloat(b.calories) - parseFloat(a.calories));
+    .sort((a, b) => b.calories - a.calories);
 
   console.log(`\n📊 Total unique items found: ${allItems.length}`);
 
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.json_to_sheet(allItems);
 
-  // Auto-size columns
   const colWidths = Object.keys(allItems[0] || {}).map(key => ({
     wch: Math.max(key.length, ...allItems.map(r => String(r[key] || '').length))
   }));
@@ -380,7 +424,6 @@ async function main() {
   const arg = process.argv[2];
 
   if (arg === '--analyze') {
-    // Analyze mode — no DB needed
     try {
       await analyzeMode();
     } catch (err) {
@@ -391,11 +434,10 @@ async function main() {
     return;
   }
 
-  // Normal scrape mode
   const dateStr = arg || getTodayEST();
   const client  = await pool.connect();
 
-  console.log(`\n📅 Scraping menus for ${dateStr} (site format: ${toSiteDate(dateStr)})\n`);
+  console.log(`\n📅 Scraping menus for ${dateStr}\n`);
 
   try {
     const { rows: categoryRows } = await client.query(
@@ -407,7 +449,6 @@ async function main() {
     await scrapeDay(client, dateStr, ITEM_CATEGORIES);
 
     console.log(`\n✅ Done`);
-
   } catch (err) {
     console.error('❌ Fatal error:', err);
   } finally {
