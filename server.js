@@ -386,10 +386,10 @@ app.put('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, r
       override_serving_size, admin_review_status
     } = req.body;
 
-    const hasOverrides = override_calories != null || override_protein != null ||
-      override_carbs != null || override_fat != null || override_serving_size != null;
+  const hasOverrides = override_calories != null || override_protein != null ||
+    override_carbs != null || override_fat != null || override_serving_size != null;
 
-    const status = hasOverrides ? 'overridden' : (admin_review_status || 'reviewed');
+  const status = admin_review_status || (hasOverrides ? 'overridden' : 'reviewed');
 
     const result = await pool.query(
       `UPDATE menu_items_master SET
