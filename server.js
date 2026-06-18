@@ -10,6 +10,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
+app.use(express.static('public'));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
