@@ -1,0 +1,779 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dining Admin</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+    }
+
+    /* ---- LOGIN ---- */
+    #login-screen {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+
+    .login-box {
+      background: white;
+      padding: 40px;
+      border-radius: 12px;
+      box-shadow: 0 2px 16px rgba(0,0,0,0.1);
+      width: 360px;
+    }
+
+    .login-box h1 {
+      font-size: 22px;
+      margin-bottom: 24px;
+      color: #003087;
+    }
+
+    .login-box input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 15px;
+      margin-bottom: 12px;
+    }
+
+    .login-box button {
+      width: 100%;
+      padding: 11px;
+      background: #003087;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+
+    .login-box button:hover { background: #002070; }
+    #login-error { color: #c00; font-size: 13px; margin-top: 8px; }
+
+    /* ---- MAIN APP ---- */
+    #app { display: none; }
+
+    header {
+      background: #003087;
+      color: white;
+      padding: 16px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 { font-size: 18px; font-weight: 700; }
+
+    .logout-btn {
+      background: rgba(255,255,255,0.15);
+      border: none;
+      color: white;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+
+    /* ---- STATS BAR ---- */
+    .stats-bar {
+      display: flex;
+      gap: 16px;
+      padding: 20px 24px;
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 14px 20px;
+      min-width: 120px;
+    }
+
+    .stat-card .label { font-size: 12px; color: #666; text-transform: uppercase; letter-spacing: 0.5px; }
+    .stat-card .value { font-size: 28px; font-weight: 700; margin-top: 2px; }
+    .stat-card.pending .value { color: #d97706; }
+    .stat-card.overridden .value { color: #003087; }
+    .stat-card.reviewed .value { color: #16a34a; }
+
+    /* ---- CONTROLS ---- */
+    .controls {
+      padding: 16px 24px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .controls input[type="text"] {
+      padding: 9px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      width: 260px;
+    }
+
+    .controls select {
+      padding: 9px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+      cursor: pointer;
+    }
+
+    .filter-btn {
+      padding: 9px 18px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      font-size: 13px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+
+    .filter-btn.active { background: #003087; color: white; border-color: #003087; }
+
+    .count-label { font-size: 13px; color: #666; margin-left: auto; }
+
+    /* ---- TABLE ---- */
+    .table-wrap {
+      padding: 0 24px 40px;
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+
+    thead {
+      background: #f8fafc;
+      border-bottom: 2px solid #e5e7eb;
+    }
+
+    th {
+      text-align: left;
+      padding: 12px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #555;
+    }
+
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      font-size: 14px;
+      vertical-align: middle;
+    }
+
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafafa; }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.3px;
+    }
+
+    .badge.pending { background: #fef3c7; color: #92400e; }
+    .badge.reviewed { background: #dcfce7; color: #166534; }
+    .badge.overridden { background: #dbeafe; color: #1e40af; }
+
+    .item-name { font-weight: 500; }
+    .item-sub { font-size: 12px; color: #888; margin-top: 2px; }
+
+    .nutrition-cell { font-size: 13px; }
+    .nutrition-cell .override { color: #003087; font-weight: 600; }
+    .nutrition-cell .scraped { color: #999; }
+    .nutrition-cell .null-val { color: #e53e3e; font-style: italic; }
+
+    /* ---- EDIT ROW ---- */
+    .edit-row td {
+      background: #f0f5ff;
+      padding: 16px;
+    }
+
+    .edit-form {
+      display: flex;
+      gap: 10px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .edit-form .field {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .edit-form label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #555;
+      letter-spacing: 0.3px;
+    }
+
+    .edit-form input {
+      padding: 8px 10px;
+      border: 1px solid #c7d2fe;
+      border-radius: 6px;
+      font-size: 14px;
+      width: 90px;
+      background: white;
+    }
+
+    .edit-form input:focus {
+      outline: none;
+      border-color: #003087;
+      box-shadow: 0 0 0 2px rgba(0,48,135,0.1);
+    }
+
+    .edit-form input.wide { width: 140px; }
+
+    .edit-actions {
+      display: flex;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .btn-save {
+      padding: 8px 18px;
+      background: #003087;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-save:hover { background: #002070; }
+
+    .btn-mark-reviewed {
+      padding: 8px 18px;
+      background: #16a34a;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+
+    .btn-mark-reviewed:hover { background: #15803d; }
+
+    .btn-clear {
+      padding: 8px 18px;
+      background: white;
+      color: #666;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .btn-clear:hover { background: #f5f5f5; }
+
+    .btn-cancel {
+      padding: 8px 14px;
+      background: transparent;
+      color: #888;
+      border: none;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .edit-btn {
+      padding: 5px 12px;
+      background: transparent;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #555;
+    }
+
+    .edit-btn:hover { border-color: #003087; color: #003087; background: #f0f5ff; }
+
+    .scraped-hint {
+      font-size: 11px;
+      color: #888;
+      margin-top: 6px;
+    }
+
+    /* ---- LOADING / EMPTY ---- */
+    .loading {
+      text-align: center;
+      padding: 60px;
+      color: #888;
+      font-size: 15px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 60px;
+      color: #aaa;
+      font-size: 15px;
+    }
+
+    .save-success {
+      display: inline-block;
+      color: #16a34a;
+      font-size: 13px;
+      margin-left: 8px;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    .save-success.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>🍽️ Dining Admin</h1>
+    <input type="email" id="login-email" placeholder="Email" />
+    <input type="password" id="login-password" placeholder="Password" />
+    <button onclick="login()">Sign In</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <h1>🍽️ Dining Admin — Nutrition Master List</h1>
+    <button class="logout-btn" onclick="logout()">Sign Out</button>
+  </header>
+
+  <div class="stats-bar">
+    <div class="stat-card pending">
+      <div class="label">Needs Review</div>
+      <div class="value" id="stat-pending">—</div>
+    </div>
+    <div class="stat-card overridden">
+      <div class="label">Overridden</div>
+      <div class="value" id="stat-overridden">—</div>
+    </div>
+    <div class="stat-card reviewed">
+      <div class="label">Reviewed</div>
+      <div class="value" id="stat-reviewed">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="label">Total Items</div>
+      <div class="value" id="stat-total">—</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <input type="text" id="search-input" placeholder="Search items..." oninput="debounceLoad()" />
+
+    <select id="hall-filter" onchange="loadItems()">
+      <option value="">All Dining Halls</option>
+    </select>
+
+    <button class="filter-btn active" id="filter-all" onclick="setFilter('')">All</button>
+    <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Needs Review</button>
+    <button class="filter-btn" id="filter-overridden" onclick="setFilter('overridden')">Overridden</button>
+    <button class="filter-btn" id="filter-reviewed" onclick="setFilter('reviewed')">Reviewed</button>
+
+    <span class="count-label" id="count-label"></span>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Item</th>
+          <th>Hall / Station</th>
+          <th>Meal</th>
+          <th>Calories</th>
+          <th>Protein</th>
+          <th>Carbs</th>
+          <th>Fat</th>
+          <th>Serving</th>
+          <th>Status</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="items-tbody">
+        <tr><td colspan="10" class="loading">Loading...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  // ---- CONFIG ----
+  const API = ''; // empty = same origin; set to 'https://your-api.com' if different
+
+  // ---- STATE ----
+  let token = localStorage.getItem('admin_token');
+  let currentFilter = '';
+  let editingId = null;
+  let debounceTimer = null;
+  let allItems = [];
+
+  // ---- INIT ----
+  if (token) showApp();
+
+  async function login() {
+    const email = document.getElementById('login-email').value;
+    const password = document.getElementById('login-password').value;
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = '';
+
+    try {
+      const res = await fetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+      const data = await res.json();
+      if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }
+      if (!data.user.isAdmin) { errEl.textContent = 'Not an admin account.'; return; }
+      token = data.token;
+      localStorage.setItem('admin_token', token);
+      showApp();
+    } catch (e) {
+      errEl.textContent = 'Connection error.';
+    }
+  }
+
+  function logout() {
+    localStorage.removeItem('admin_token');
+    token = null;
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+  }
+
+  async function showApp() {
+    document.getElementById('login-screen').style.display = 'none';
+    document.getElementById('app').style.display = 'block';
+    await loadDiningHalls();
+    await loadStats();
+    await loadItems();
+  }
+
+  // ---- API HELPERS ----
+  function authHeaders() {
+    return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+  }
+
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API}${path}`, { ...options, headers: authHeaders() });
+    if (res.status === 403) { logout(); return null; }
+    return res;
+  }
+
+  // ---- LOAD DINING HALLS ----
+  async function loadDiningHalls() {
+    const res = await apiFetch('/api/dining-halls');
+    if (!res) return;
+    const halls = await res.json();
+    const select = document.getElementById('hall-filter');
+    halls.forEach(h => {
+      const opt = document.createElement('option');
+      opt.value = h.id;
+      opt.textContent = h.name;
+      select.appendChild(opt);
+    });
+  }
+
+  // ---- LOAD STATS ----
+  async function loadStats() {
+    const res = await apiFetch('/api/admin/stats');
+    if (!res) return;
+    const data = await res.json();
+    document.getElementById('stat-pending').textContent = data.pending;
+    document.getElementById('stat-overridden').textContent = data.overridden;
+    document.getElementById('stat-reviewed').textContent = data.reviewed;
+    document.getElementById('stat-total').textContent = data.total;
+  }
+
+  // ---- FILTER BUTTONS ----
+  function setFilter(status) {
+    currentFilter = status;
+    ['all', 'pending', 'overridden', 'reviewed'].forEach(f => {
+      document.getElementById(`filter-${f}`).classList.toggle('active', 
+        (f === 'all' && status === '') || f === status);
+    });
+    loadItems();
+  }
+
+  function debounceLoad() {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(loadItems, 300);
+  }
+
+  // ---- LOAD ITEMS ----
+  async function loadItems() {
+    const tbody = document.getElementById('items-tbody');
+    tbody.innerHTML = '<tr><td colspan="10" class="loading">Loading...</td></tr>';
+    editingId = null;
+
+    const search = document.getElementById('search-input').value;
+    const diningHallId = document.getElementById('hall-filter').value;
+
+    const params = new URLSearchParams();
+    if (currentFilter) params.set('status', currentFilter);
+    if (diningHallId) params.set('dining_hall_id', diningHallId);
+    if (search) params.set('search', search);
+
+    const res = await apiFetch(`/api/admin/menu-items?${params}`);
+    if (!res) return;
+    allItems = await res.json();
+
+    document.getElementById('count-label').textContent = `${allItems.length} items`;
+    renderItems(allItems);
+  }
+
+  // ---- RENDER ----
+  function renderItems(items) {
+    const tbody = document.getElementById('items-tbody');
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">No items found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = items.map(item => renderItemRow(item)).join('');
+  }
+
+  function renderItemRow(item) {
+    const cal = renderNutritionCell(item.override_calories, item.scraped_calories);
+    const pro = renderNutritionCell(item.override_protein, item.scraped_protein);
+    const carb = renderNutritionCell(item.override_carbs, item.scraped_carbs);
+    const fat = renderNutritionCell(item.override_fat, item.scraped_fat);
+    const serving = renderNutritionCell(item.override_serving_size, item.scraped_serving_size, true);
+
+    return `
+      <tr id="row-${item.id}">
+        <td>
+          <div class="item-name">${escHtml(item.name)}</div>
+        </td>
+        <td>
+          <div>${escHtml(item.dining_hall_name)}</div>
+          <div class="item-sub">${escHtml(item.station_name)}</div>
+        </td>
+        <td>${item.meal_type || '—'}</td>
+        <td class="nutrition-cell">${cal}</td>
+        <td class="nutrition-cell">${pro}</td>
+        <td class="nutrition-cell">${carb}</td>
+        <td class="nutrition-cell">${fat}</td>
+        <td class="nutrition-cell">${serving}</td>
+        <td><span class="badge ${item.admin_review_status}">${item.admin_review_status}</span></td>
+        <td>
+          <button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button>
+        </td>
+      </tr>
+      <tr id="edit-row-${item.id}" class="edit-row" style="display:none;">
+        <td colspan="10">
+          ${renderEditForm(item)}
+        </td>
+      </tr>
+    `;
+  }
+
+  function renderNutritionCell(override, scraped, isText = false) {
+    if (override != null && override !== '') {
+      return `<span class="override">${escHtml(String(override))}</span>`;
+    }
+    if (scraped == null) {
+      return `<span class="null-val">missing</span>`;
+    }
+    return `<span class="scraped">${escHtml(String(scraped))}</span>`;
+  }
+
+  function renderEditForm(item) {
+    return `
+      <div class="edit-form">
+        <div class="field">
+          <label>Calories</label>
+          <input type="number" id="edit-cal-${item.id}" 
+            value="${item.override_calories ?? ''}" 
+            placeholder="${item.scraped_calories ?? 'null'}" />
+        </div>
+        <div class="field">
+          <label>Protein (g)</label>
+          <input type="number" id="edit-pro-${item.id}" 
+            value="${item.override_protein ?? ''}" 
+            placeholder="${item.scraped_protein ?? 'null'}" />
+        </div>
+        <div class="field">
+          <label>Carbs (g)</label>
+          <input type="number" id="edit-carb-${item.id}" 
+            value="${item.override_carbs ?? ''}" 
+            placeholder="${item.scraped_carbs ?? 'null'}" />
+        </div>
+        <div class="field">
+          <label>Fat (g)</label>
+          <input type="number" id="edit-fat-${item.id}" 
+            value="${item.override_fat ?? ''}" 
+            placeholder="${item.scraped_fat ?? 'null'}" />
+        </div>
+        <div class="field">
+          <label>Serving Size</label>
+          <input type="text" id="edit-serving-${item.id}" class="wide"
+            value="${item.override_serving_size ?? ''}" 
+            placeholder="${item.scraped_serving_size ?? 'null'}" />
+        </div>
+      </div>
+      <div class="scraped-hint">
+        Scraped values (placeholders): cal ${item.scraped_calories ?? 'null'} · 
+        pro ${item.scraped_protein ?? 'null'}g · 
+        carb ${item.scraped_carbs ?? 'null'}g · 
+        fat ${item.scraped_fat ?? 'null'}g · 
+        serving ${item.scraped_serving_size ?? 'null'}
+      </div>
+      <div class="edit-actions" style="margin-top:12px;">
+        <button class="btn-save" onclick="saveItem(${item.id})">Save Overrides</button>
+        <button class="btn-mark-reviewed" onclick="markReviewed(${item.id})">✓ Mark as Reviewed</button>
+        <button class="btn-clear" onclick="clearOverrides(${item.id})">Clear Overrides</button>
+        <button class="btn-cancel" onclick="toggleEdit(${item.id})">Cancel</button>
+        <span class="save-success" id="save-success-${item.id}">✓ Saved</span>
+      </div>
+    `;
+  }
+
+  // ---- EDIT ACTIONS ----
+  function toggleEdit(id) {
+    // Close previously open edit row
+    if (editingId && editingId !== id) {
+      document.getElementById(`edit-row-${editingId}`).style.display = 'none';
+    }
+
+    const editRow = document.getElementById(`edit-row-${id}`);
+    const isOpen = editRow.style.display !== 'none';
+    editRow.style.display = isOpen ? 'none' : 'table-row';
+    editingId = isOpen ? null : id;
+  }
+
+  async function saveItem(id) {
+    const cal = document.getElementById(`edit-cal-${id}`).value;
+    const pro = document.getElementById(`edit-pro-${id}`).value;
+    const carb = document.getElementById(`edit-carb-${id}`).value;
+    const fat = document.getElementById(`edit-fat-${id}`).value;
+    const serving = document.getElementById(`edit-serving-${id}`).value;
+
+    const body = {
+      override_calories: cal !== '' ? parseInt(cal) : null,
+      override_protein: pro !== '' ? parseInt(pro) : null,
+      override_carbs: carb !== '' ? parseInt(carb) : null,
+      override_fat: fat !== '' ? parseInt(fat) : null,
+      override_serving_size: serving !== '' ? serving : null,
+    };
+
+    const res = await apiFetch(`/api/admin/menu-items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(body)
+    });
+
+    if (!res || !res.ok) { alert('Save failed.'); return; }
+    const updated = await res.json();
+
+    // Update local data and re-render just this row
+    const idx = allItems.findIndex(i => i.id === id);
+    if (idx !== -1) {
+      allItems[idx] = { ...allItems[idx], ...updated };
+      updateRow(allItems[idx]);
+    }
+
+    // Show success flash
+    const successEl = document.getElementById(`save-success-${id}`);
+    successEl.classList.add('show');
+    setTimeout(() => successEl.classList.remove('show'), 2000);
+
+    await loadStats();
+  }
+
+  async function markReviewed(id) {
+    const res = await apiFetch(`/api/admin/menu-items/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ admin_review_status: 'reviewed' })
+    });
+    if (!res || !res.ok) { alert('Failed.'); return; }
+    const updated = await res.json();
+
+    const idx = allItems.findIndex(i => i.id === id);
+    if (idx !== -1) {
+      allItems[idx] = { ...allItems[idx], ...updated };
+      updateRow(allItems[idx]);
+    }
+
+    document.getElementById(`edit-row-${id}`).style.display = 'none';
+    editingId = null;
+    await loadStats();
+  }
+
+  async function clearOverrides(id) {
+    if (!confirm('Clear all overrides and revert to scraped values?')) return;
+
+    const res = await apiFetch(`/api/admin/menu-items/${id}/overrides`, { method: 'DELETE' });
+    if (!res || !res.ok) { alert('Failed.'); return; }
+    const updated = await res.json();
+
+    const idx = allItems.findIndex(i => i.id === id);
+    if (idx !== -1) {
+      allItems[idx] = { ...allItems[idx], ...updated };
+      updateRow(allItems[idx]);
+    }
+
+    document.getElementById(`edit-row-${id}`).style.display = 'none';
+    editingId = null;
+    await loadStats();
+  }
+
+  function updateRow(item) {
+    const row = document.getElementById(`row-${item.id}`);
+    if (!row) return;
+    const tempDiv = document.createElement('tbody');
+    tempDiv.innerHTML = renderItemRow(item);
+    row.outerHTML = tempDiv.querySelector(`#row-${item.id}`).outerHTML;
+    // Also update the edit row
+    const editRow = document.getElementById(`edit-row-${item.id}`);
+    if (editRow) {
+      const newEditRow = tempDiv.querySelector(`#edit-row-${item.id}`);
+      if (newEditRow) editRow.outerHTML = newEditRow.outerHTML;
+    }
+  }
+
+  // ---- UTILS ----
+  function escHtml(str) {
+    if (str == null) return '—';
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+  // Allow pressing Enter to login
+  document.getElementById('login-password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') login();
+  });
+</script>
+</body>
+</html>

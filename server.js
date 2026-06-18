@@ -32,6 +32,11 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+const adminOnly = (req, res, next) => {
+  if (!req.user.isAdmin) return res.status(403).json({ error: 'Admin access required' });
+  next();
+};
+
 // ========== AUTH ROUTES ==========
 
 app.post('/api/auth/signup', async (req, res) => {
@@ -42,12 +47,12 @@ app.post('/api/auth/signup', async (req, res) => {
     if (existingUser.rows.length > 0) return res.status(400).json({ error: 'Email already registered' });
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email',
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, is_admin',
       [email.toLowerCase(), hashedPassword]
     );
     const user = result.rows[0];
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET);
-    res.status(201).json({ token, user: { id: user.id, email: user.email } });
+    const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: false }, process.env.JWT_SECRET);
+    res.status(201).json({ token, user: { id: user.id, email: user.email, isAdmin: false } });
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ error: 'Server error during signup' });
@@ -63,8 +68,8 @@ app.post('/api/auth/login', async (req, res) => {
     const user = result.rows[0];
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ userId: user.id, email: user.email }, process.env.JWT_SECRET);
-    res.json({ token, user: { id: user.id, email: user.email } });
+    const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, process.env.JWT_SECRET);
+    res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login' });
@@ -155,7 +160,6 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   }
 });
 
-// Get options for a menu item
 app.get('/api/menu-items/:menuItemId/options', authenticateToken, async (req, res) => {
   try {
     const { menuItemId } = req.params;
@@ -298,6 +302,147 @@ app.put('/api/user/goal', authenticateToken, async (req, res) => {
     res.json({ daily_calorie_goal: result.rows[0].daily_calorie_goal });
   } catch (error) {
     console.error('Error updating calorie goal:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ========== ADMIN ROUTES ==========
+
+app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE admin_review_status = 'pending') as pending,
+        COUNT(*) FILTER (WHERE admin_review_status = 'reviewed') as reviewed,
+        COUNT(*) FILTER (WHERE admin_review_status = 'overridden') as overridden,
+        COUNT(*) as total
+      FROM menu_items_master WHERE is_active = true
+    `);
+    res.json(result.rows[0]);
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/admin/menu-items', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { status, search, dining_hall_id } = req.query;
+
+    let query = `
+      SELECT
+        mi.id,
+        mi.name,
+        mi.meal_type,
+        mi.admin_review_status,
+        mi.nutrition_source,
+        mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
+        mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
+        COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+        COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+        COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+        COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+        COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+        s.name as station_name,
+        dh.id as dining_hall_id,
+        dh.name as dining_hall_name,
+        mi.updated_at
+      FROM menu_items_master mi
+      JOIN stations s ON mi.station_id = s.id
+      JOIN dining_halls dh ON s.dining_hall_id = dh.id
+      WHERE mi.is_active = true
+    `;
+
+    const params = [];
+
+    if (status) {
+      params.push(status);
+      query += ` AND mi.admin_review_status = $${params.length}`;
+    }
+    if (dining_hall_id) {
+      params.push(dining_hall_id);
+      query += ` AND dh.id = $${params.length}`;
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      query += ` AND mi.name ILIKE $${params.length}`;
+    }
+
+    query += ` ORDER BY mi.admin_review_status = 'pending' DESC, dh.name, s.name, mi.name`;
+
+    const result = await pool.query(query, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin menu items error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      override_calories, override_protein, override_carbs, override_fat,
+      override_serving_size, admin_review_status
+    } = req.body;
+
+    const hasOverrides = override_calories != null || override_protein != null ||
+      override_carbs != null || override_fat != null || override_serving_size != null;
+
+    const status = hasOverrides ? 'overridden' : (admin_review_status || 'reviewed');
+
+    const result = await pool.query(
+      `UPDATE menu_items_master SET
+        override_calories = $1,
+        override_protein = $2,
+        override_carbs = $3,
+        override_fat = $4,
+        override_serving_size = $5,
+        admin_review_status = $6,
+        nutrition_status = $7,
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $8
+       RETURNING *`,
+      [
+        override_calories || null,
+        override_protein || null,
+        override_carbs || null,
+        override_fat || null,
+        override_serving_size || null,
+        status,
+        hasOverrides ? 'overridden' : 'accepted',
+        id
+      ]
+    );
+
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Admin update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Clear overrides and revert to scraped values
+app.delete('/api/admin/menu-items/:id/overrides', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query(
+      `UPDATE menu_items_master SET
+        override_calories = NULL,
+        override_protein = NULL,
+        override_carbs = NULL,
+        override_fat = NULL,
+        override_serving_size = NULL,
+        admin_review_status = 'reviewed',
+        nutrition_status = 'accepted',
+        updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1 RETURNING *`,
+      [id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Admin clear overrides error:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
