@@ -703,15 +703,6 @@
                 <label>Serving Size</label>
                 <input type="text" id="new-item-serving" placeholder="e.g. 1 sandwich" />
               </div>
-              <div class="form-field">
-                <label>Meal Type</label>
-                <select id="new-item-meal">
-                  <option value="breakfast">Breakfast</option>
-                  <option value="lunch">Lunch</option>
-                  <option value="dinner">Dinner</option>
-                  <option value="all">All Day</option>
-                </select>
-              </div>
               <div class="form-field" style="justify-content: flex-end;">
                 <button class="btn-add" onclick="addFixedItem()">+ Add Item</button>
               </div>
@@ -1014,7 +1005,7 @@
 
     const name = document.getElementById('new-item-name').value.trim();
     const stationId = document.getElementById('new-item-station').value;
-    const mealType = document.getElementById('new-item-meal').value;
+    const mealType = 'all';
     const cal = document.getElementById('new-item-cal').value;
     const pro = document.getElementById('new-item-pro').value;
     const carb = document.getElementById('new-item-carb').value;
