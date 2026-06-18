@@ -105,6 +105,36 @@ app.get('/api/dining-halls/:diningHallId/stations', authenticateToken, async (re
   }
 });
 
+// POST create a station
+app.post('/api/admin/stations', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { dining_hall_id, name } = req.body;
+    if (!dining_hall_id || !name) return res.status(400).json({ error: 'dining_hall_id and name required' });
+
+    const result = await pool.query(
+      `INSERT INTO stations (dining_hall_id, name)
+       VALUES ($1, $2)
+       RETURNING *`,
+      [dining_hall_id, name]
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    if (error.code === '23505') return res.status(400).json({ error: 'A station with that name already exists in this dining hall.' });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// DELETE a station
+app.delete('/api/admin/stations/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM stations WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Station not found' });
+    res.json({ message: 'Deleted', station: result.rows[0] });
+  } catch (error) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 // ========== MENU ROUTES ==========
 
 app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {

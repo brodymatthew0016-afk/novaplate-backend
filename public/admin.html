@@ -13,7 +13,6 @@
       color: #1a1a1a;
     }
 
-    /* ---- LOGIN ---- */
     #login-screen {
       display: flex;
       align-items: center;
@@ -29,11 +28,7 @@
       width: 360px;
     }
 
-    .login-box h1 {
-      font-size: 22px;
-      margin-bottom: 24px;
-      color: #003087;
-    }
+    .login-box h1 { font-size: 22px; margin-bottom: 24px; color: #003087; }
 
     .login-box input {
       width: 100%;
@@ -59,7 +54,6 @@
     .login-box button:hover { background: #002070; }
     #login-error { color: #c00; font-size: 13px; margin-top: 8px; }
 
-    /* ---- MAIN APP ---- */
     #app { display: none; }
 
     header {
@@ -82,6 +76,33 @@
       cursor: pointer;
       font-size: 13px;
     }
+
+    /* ---- TABS ---- */
+    .tab-bar {
+      background: white;
+      border-bottom: 1px solid #e5e7eb;
+      padding: 0 24px;
+      display: flex;
+      gap: 0;
+    }
+
+    .tab-btn {
+      padding: 14px 20px;
+      border: none;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 500;
+      color: #666;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+    }
+
+    .tab-btn.active { color: #003087; border-bottom-color: #003087; }
+    .tab-btn:hover:not(.active) { color: #333; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
 
     /* ---- STATS BAR ---- */
     .stats-bar {
@@ -143,14 +164,10 @@
     }
 
     .filter-btn.active { background: #003087; color: white; border-color: #003087; }
-
     .count-label { font-size: 13px; color: #666; margin-left: auto; }
 
     /* ---- TABLE ---- */
-    .table-wrap {
-      padding: 0 24px 40px;
-      overflow-x: auto;
-    }
+    .table-wrap { padding: 0 24px 40px; overflow-x: auto; }
 
     table {
       width: 100%;
@@ -161,10 +178,7 @@
       box-shadow: 0 1px 4px rgba(0,0,0,0.06);
     }
 
-    thead {
-      background: #f8fafc;
-      border-bottom: 2px solid #e5e7eb;
-    }
+    thead { background: #f8fafc; border-bottom: 2px solid #e5e7eb; }
 
     th {
       text-align: left;
@@ -202,30 +216,15 @@
 
     .item-name { font-weight: 500; }
     .item-sub { font-size: 12px; color: #888; margin-top: 2px; }
-
     .nutrition-cell { font-size: 13px; }
     .nutrition-cell .override { color: #003087; font-weight: 600; }
     .nutrition-cell .scraped { color: #999; }
     .nutrition-cell .null-val { color: #e53e3e; font-style: italic; }
 
-    /* ---- EDIT ROW ---- */
-    .edit-row td {
-      background: #f0f5ff;
-      padding: 16px;
-    }
+    .edit-row td { background: #f0f5ff; padding: 16px; }
 
-    .edit-form {
-      display: flex;
-      gap: 10px;
-      align-items: flex-end;
-      flex-wrap: wrap;
-    }
-
-    .edit-form .field {
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    }
+    .edit-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+    .edit-form .field { display: flex; flex-direction: column; gap: 4px; }
 
     .edit-form label {
       font-size: 11px;
@@ -266,11 +265,7 @@
       box-shadow: 0 0 0 2px rgba(0,48,135,0.1);
     }
 
-    .edit-actions {
-      display: flex;
-      gap: 8px;
-      margin-top: 4px;
-    }
+    .edit-actions { display: flex; gap: 8px; margin-top: 4px; }
 
     .btn-save {
       padding: 8px 18px;
@@ -317,27 +312,9 @@
     }
 
     .edit-btn:hover { border-color: #003087; color: #003087; background: #f0f5ff; }
-
-    .scraped-hint {
-      font-size: 11px;
-      color: #888;
-      margin-top: 6px;
-    }
-
-    /* ---- LOADING / EMPTY ---- */
-    .loading {
-      text-align: center;
-      padding: 60px;
-      color: #888;
-      font-size: 15px;
-    }
-
-    .empty {
-      text-align: center;
-      padding: 60px;
-      color: #aaa;
-      font-size: 15px;
-    }
+    .scraped-hint { font-size: 11px; color: #888; margin-top: 6px; }
+    .loading { text-align: center; padding: 60px; color: #888; font-size: 15px; }
+    .empty { text-align: center; padding: 60px; color: #aaa; font-size: 15px; }
 
     .save-success {
       display: inline-block;
@@ -349,6 +326,233 @@
     }
 
     .save-success.show { opacity: 1; }
+
+    /* ---- FIXED MENUS TAB ---- */
+    .fixed-menus-wrap { padding: 24px; }
+
+    .fixed-menus-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .fixed-menus-header h2 { font-size: 18px; font-weight: 600; color: #1a1a1a; }
+
+    .hall-tabs { display: flex; gap: 8px; margin-bottom: 24px; }
+
+    .hall-tab-btn {
+      padding: 8px 20px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: white;
+      font-size: 14px;
+      cursor: pointer;
+      font-weight: 500;
+      color: #555;
+    }
+
+    .hall-tab-btn.active { background: #003087; color: white; border-color: #003087; }
+
+    /* two-column layout */
+    .fixed-menus-layout {
+      display: grid;
+      grid-template-columns: 280px 1fr;
+      gap: 24px;
+      align-items: start;
+    }
+
+    /* ---- STATIONS PANEL ---- */
+    .stations-panel {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    .stations-panel-header {
+      padding: 14px 16px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .stations-panel-header h3 { font-size: 14px; font-weight: 600; }
+
+    .station-list { padding: 8px 0; min-height: 80px; }
+
+    .station-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 9px 16px;
+      font-size: 14px;
+      border-bottom: 1px solid #f9f9f9;
+    }
+
+    .station-item:last-child { border-bottom: none; }
+    .station-item:hover { background: #fafafa; }
+    .station-item span { color: #333; }
+
+    .station-delete-btn {
+      padding: 3px 8px;
+      background: transparent;
+      border: 1px solid #fca5a5;
+      border-radius: 5px;
+      font-size: 11px;
+      cursor: pointer;
+      color: #dc2626;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+
+    .station-item:hover .station-delete-btn { opacity: 1; }
+
+    .add-station-form {
+      padding: 12px 16px;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      gap: 8px;
+    }
+
+    .add-station-form input {
+      flex: 1;
+      padding: 8px 10px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 13px;
+    }
+
+    .add-station-form input:focus {
+      outline: none;
+      border-color: #003087;
+      box-shadow: 0 0 0 2px rgba(0,48,135,0.1);
+    }
+
+    .btn-add-station {
+      padding: 8px 14px;
+      background: #003087;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-add-station:hover { background: #002070; }
+    .station-msg { padding: 6px 16px; font-size: 12px; }
+
+    /* ---- ADD ITEM + ITEMS LIST ---- */
+    .items-column { display: flex; flex-direction: column; gap: 20px; }
+
+    .add-item-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      padding: 20px;
+    }
+
+    .add-item-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 14px; }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr 1fr 1fr;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .form-field { display: flex; flex-direction: column; gap: 4px; }
+
+    .form-field label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      color: #555;
+      letter-spacing: 0.3px;
+    }
+
+    .form-field input, .form-field select {
+      padding: 9px 12px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+      background: white;
+      width: 100%;
+    }
+
+    .form-field input:focus, .form-field select:focus {
+      outline: none;
+      border-color: #003087;
+      box-shadow: 0 0 0 2px rgba(0,48,135,0.1);
+    }
+
+    .form-row-2 {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr auto;
+      gap: 10px;
+      margin-top: 10px;
+      align-items: end;
+    }
+
+    .btn-add {
+      padding: 9px 20px;
+      background: #003087;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      white-space: nowrap;
+    }
+
+    .btn-add:hover { background: #002070; }
+    .form-error { color: #c00; font-size: 13px; margin-top: 8px; }
+    .form-success { color: #16a34a; font-size: 13px; margin-top: 8px; }
+
+    .fixed-items-card {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    .fixed-items-card-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .fixed-items-card-header h3 { font-size: 15px; font-weight: 600; }
+    .fixed-items-card-header span { font-size: 13px; color: #888; }
+
+    .delete-btn {
+      padding: 4px 10px;
+      background: transparent;
+      border: 1px solid #fca5a5;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #dc2626;
+    }
+
+    .delete-btn:hover { background: #fef2f2; }
+
+    .station-group-label {
+      padding: 8px 16px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #888;
+      background: #f8fafc;
+      border-bottom: 1px solid #f0f0f0;
+    }
   </style>
 </head>
 <body>
@@ -367,87 +571,206 @@
 <!-- MAIN APP -->
 <div id="app">
   <header>
-    <h1>Dining Admin: Nutrition Master List</h1>
+    <h1>Dining Admin</h1>
     <button class="logout-btn" onclick="logout()">Sign Out</button>
   </header>
 
-  <div class="stats-bar">
-    <div class="stat-card pending">
-      <div class="label">Needs Review</div>
-      <div class="value" id="stat-pending">—</div>
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('nutrition')">Nutrition Review</button>
+    <button class="tab-btn" onclick="switchTab('fixed')">Fixed Menus</button>
+  </div>
+
+  <!-- NUTRITION REVIEW TAB -->
+  <div class="tab-panel active" id="tab-nutrition">
+    <div class="stats-bar">
+      <div class="stat-card pending">
+        <div class="label">Needs Review</div>
+        <div class="value" id="stat-pending">—</div>
+      </div>
+      <div class="stat-card overridden">
+        <div class="label">Overridden</div>
+        <div class="value" id="stat-overridden">—</div>
+      </div>
+      <div class="stat-card reviewed">
+        <div class="label">Reviewed</div>
+        <div class="value" id="stat-reviewed">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Items</div>
+        <div class="value" id="stat-total">—</div>
+      </div>
     </div>
-    <div class="stat-card overridden">
-      <div class="label">Overridden</div>
-      <div class="value" id="stat-overridden">—</div>
+
+    <div class="controls">
+      <input type="text" id="search-input" placeholder="Search items..." oninput="debounceLoad()" />
+      <select id="hall-filter" onchange="loadItems()">
+        <option value="">All Dining Halls</option>
+      </select>
+      <button class="filter-btn active" id="filter-all" onclick="setFilter('')">All</button>
+      <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Needs Review</button>
+      <button class="filter-btn" id="filter-overridden" onclick="setFilter('overridden')">Overridden</button>
+      <button class="filter-btn" id="filter-reviewed" onclick="setFilter('reviewed')">Reviewed</button>
+      <span class="count-label" id="count-label"></span>
     </div>
-    <div class="stat-card reviewed">
-      <div class="label">Reviewed</div>
-      <div class="value" id="stat-reviewed">—</div>
-    </div>
-    <div class="stat-card">
-      <div class="label">Total Items</div>
-      <div class="value" id="stat-total">—</div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Hall / Station</th>
+            <th>Meal</th>
+            <th>Calories</th>
+            <th>Protein</th>
+            <th>Carbs</th>
+            <th>Fat</th>
+            <th>Serving</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="items-tbody">
+          <tr><td colspan="10" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <div class="controls">
-    <input type="text" id="search-input" placeholder="Search items..." oninput="debounceLoad()" />
+  <!-- FIXED MENUS TAB -->
+  <div class="tab-panel" id="tab-fixed">
+    <div class="fixed-menus-wrap">
+      <div class="fixed-menus-header">
+        <h2>Fixed Dining Hall Menus</h2>
+      </div>
 
-    <select id="hall-filter" onchange="loadItems()">
-      <option value="">All Dining Halls</option>
-    </select>
+      <div class="hall-tabs">
+        <button class="hall-tab-btn active" onclick="switchHall('nova')" id="hall-btn-nova">Café Nova</button>
+        <button class="hall-tab-btn" onclick="switchHall('connelly')" id="hall-btn-connelly">Connelly Center</button>
+      </div>
 
-    <button class="filter-btn active" id="filter-all" onclick="setFilter('')">All</button>
-    <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Needs Review</button>
-    <button class="filter-btn" id="filter-overridden" onclick="setFilter('overridden')">Overridden</button>
-    <button class="filter-btn" id="filter-reviewed" onclick="setFilter('reviewed')">Reviewed</button>
+      <div class="fixed-menus-layout">
 
-    <span class="count-label" id="count-label"></span>
-  </div>
+        <!-- LEFT: Stations Panel -->
+        <div class="stations-panel">
+          <div class="stations-panel-header">
+            <h3 id="stations-panel-title">Café Nova Stations</h3>
+          </div>
+          <div class="station-list" id="station-list">
+            <div class="loading" style="padding: 20px; font-size: 13px;">Loading...</div>
+          </div>
+          <div class="add-station-form">
+            <input type="text" id="new-station-name" placeholder="New station name..." />
+            <button class="btn-add-station" onclick="addStation()">Add</button>
+          </div>
+          <div id="station-msg" class="station-msg"></div>
+        </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>Item</th>
-          <th>Hall / Station</th>
-          <th>Meal</th>
-          <th>Calories</th>
-          <th>Protein</th>
-          <th>Carbs</th>
-          <th>Fat</th>
-          <th>Serving</th>
-          <th>Status</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="items-tbody">
-        <tr><td colspan="10" class="loading">Loading...</td></tr>
-      </tbody>
-    </table>
+        <!-- RIGHT: Add Item + Items List -->
+        <div class="items-column">
+
+          <div class="add-item-card">
+            <h3 id="add-item-title">Add Item to Café Nova</h3>
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Item Name</label>
+                <input type="text" id="new-item-name" placeholder="e.g. Chicken Parm" />
+              </div>
+              <div class="form-field">
+                <label>Station</label>
+                <select id="new-item-station">
+                  <option value="">Select station...</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Calories</label>
+                <input type="number" id="new-item-cal" placeholder="e.g. 450" />
+              </div>
+              <div class="form-field">
+                <label>Protein (g)</label>
+                <input type="number" id="new-item-pro" placeholder="e.g. 30" />
+              </div>
+              <div class="form-field">
+                <label>Carbs (g)</label>
+                <input type="number" id="new-item-carb" placeholder="e.g. 40" />
+              </div>
+              <div class="form-field">
+                <label>Fat (g)</label>
+                <input type="number" id="new-item-fat" placeholder="e.g. 15" />
+              </div>
+            </div>
+            <div class="form-row-2">
+              <div class="form-field">
+                <label>Serving Size</label>
+                <input type="text" id="new-item-serving" placeholder="e.g. 1 sandwich" />
+              </div>
+              <div class="form-field">
+                <label>Meal Type</label>
+                <select id="new-item-meal">
+                  <option value="breakfast">Breakfast</option>
+                  <option value="lunch">Lunch</option>
+                  <option value="dinner">Dinner</option>
+                  <option value="all">All Day</option>
+                </select>
+              </div>
+              <div class="form-field" style="justify-content: flex-end;">
+                <button class="btn-add" onclick="addFixedItem()">+ Add Item</button>
+              </div>
+            </div>
+            <div id="add-item-msg"></div>
+          </div>
+
+          <div class="fixed-items-card">
+            <div class="fixed-items-card-header">
+              <h3 id="fixed-items-title">Café Nova Items</h3>
+              <span id="fixed-items-count"></span>
+            </div>
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="background:#f8fafc; border-bottom: 2px solid #e5e7eb;">
+                <tr>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Item</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Station</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Meal</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Cal</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Pro</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Carbs</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Fat</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Serving</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="fixed-items-tbody">
+                <tr><td colspan="9" class="loading">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 
 <script>
-  // ---- CONFIG ----
   const API = '';
 
-  // ---- STATE ----
   let token = localStorage.getItem('admin_token');
   let currentFilter = '';
   let editingId = null;
   let debounceTimer = null;
   let allItems = [];
+  let currentHall = 'nova';
+  let fixedHalls = {};
+  let stationsByHall = { nova: [], connelly: [] };
+  let fixedItemsByHall = { nova: [], connelly: [] };
 
-  // ---- INIT ----
   if (token) showApp();
 
+  // ---- AUTH ----
   async function login() {
     const email = document.getElementById('login-email').value;
     const password = document.getElementById('login-password').value;
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
-
     try {
       const res = await fetch(`${API}/api/admin/bypass`, {
         method: 'POST',
@@ -479,7 +802,6 @@
     await loadItems();
   }
 
-  // ---- API HELPERS ----
   function authHeaders() {
     return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
   }
@@ -490,11 +812,38 @@
     return res;
   }
 
+  // ---- TABS ----
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach((btn, i) => {
+      btn.classList.toggle('active', (i === 0 && tab === 'nutrition') || (i === 1 && tab === 'fixed'));
+    });
+    document.getElementById('tab-nutrition').classList.toggle('active', tab === 'nutrition');
+    document.getElementById('tab-fixed').classList.toggle('active', tab === 'fixed');
+    if (tab === 'fixed') loadFixedMenusTab();
+  }
+
+  // ---- HALL TABS ----
+  function switchHall(hall) {
+    currentHall = hall;
+    document.getElementById('hall-btn-nova').classList.toggle('active', hall === 'nova');
+    document.getElementById('hall-btn-connelly').classList.toggle('active', hall === 'connelly');
+
+    const hallName = hall === 'nova' ? 'Café Nova' : 'Connelly Center';
+    document.getElementById('stations-panel-title').textContent = `${hallName} Stations`;
+    document.getElementById('add-item-title').textContent = `Add Item to ${hallName}`;
+    document.getElementById('fixed-items-title').textContent = `${hallName} Items`;
+
+    renderStations(hall);
+    populateStationDropdown(hall);
+    renderFixedItems(hall);
+  }
+
   // ---- LOAD DINING HALLS ----
   async function loadDiningHalls() {
     const res = await apiFetch('/api/dining-halls');
     if (!res) return;
     const halls = await res.json();
+
     const select = document.getElementById('hall-filter');
     halls.forEach(h => {
       const opt = document.createElement('option');
@@ -502,9 +851,223 @@
       opt.textContent = h.name;
       select.appendChild(opt);
     });
+
+    halls.forEach(h => {
+      if (h.name === 'Café Nova') fixedHalls['nova'] = h;
+      if (h.name === 'Connelly Center') fixedHalls['connelly'] = h;
+    });
   }
 
-  // ---- LOAD STATS ----
+  // ---- FIXED MENUS TAB ----
+  async function loadFixedMenusTab() {
+    await loadStationsForFixedHalls();
+    renderStations(currentHall);
+    populateStationDropdown(currentHall);
+    await loadFixedItems('nova');
+    await loadFixedItems('connelly');
+    renderFixedItems(currentHall);
+  }
+
+  async function loadStationsForFixedHalls() {
+    for (const key of ['nova', 'connelly']) {
+      const hall = fixedHalls[key];
+      if (!hall) continue;
+      const res = await apiFetch(`/api/dining-halls/${hall.id}/stations`);
+      if (!res) continue;
+      stationsByHall[key] = await res.json();
+    }
+  }
+
+  // ---- STATIONS ----
+  function renderStations(hall) {
+    const list = document.getElementById('station-list');
+    const stations = stationsByHall[hall] || [];
+
+    if (stations.length === 0) {
+      list.innerHTML = '<div style="padding: 16px; font-size: 13px; color: #aaa; text-align: center;">No stations yet.</div>';
+      return;
+    }
+
+    list.innerHTML = stations.map(s => `
+      <div class="station-item">
+        <span>${escHtml(s.name)}</span>
+        <button class="station-delete-btn" onclick="deleteStation(${s.id}, '${hall}')">Remove</button>
+      </div>
+    `).join('');
+  }
+
+  function populateStationDropdown(hall) {
+    const select = document.getElementById('new-item-station');
+    select.innerHTML = '<option value="">Select station...</option>';
+    const stations = stationsByHall[hall] || [];
+    stations.forEach(s => {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = s.name;
+      select.appendChild(opt);
+    });
+  }
+
+  async function addStation() {
+    const input = document.getElementById('new-station-name');
+    const msgEl = document.getElementById('station-msg');
+    const name = input.value.trim();
+    msgEl.textContent = '';
+
+    if (!name) { msgEl.innerHTML = '<span class="form-error">Station name is required.</span>'; return; }
+
+    const hall = fixedHalls[currentHall];
+    if (!hall) { msgEl.innerHTML = '<span class="form-error">Hall not found.</span>'; return; }
+
+    const res = await apiFetch('/api/admin/stations', {
+      method: 'POST',
+      body: JSON.stringify({ dining_hall_id: hall.id, name })
+    });
+
+    if (!res || !res.ok) {
+      const err = await res.json();
+      msgEl.innerHTML = `<span class="form-error">${err.error || 'Failed to add station.'}</span>`;
+      return;
+    }
+
+    const newStation = await res.json();
+    stationsByHall[currentHall].push(newStation);
+    stationsByHall[currentHall].sort((a, b) => a.name.localeCompare(b.name));
+
+    input.value = '';
+    msgEl.innerHTML = '<span class="form-success">✓ Station added.</span>';
+    setTimeout(() => msgEl.textContent = '', 3000);
+
+    renderStations(currentHall);
+    populateStationDropdown(currentHall);
+  }
+
+  async function deleteStation(id, hall) {
+    if (!confirm('Delete this station? All items in it will also be deleted.')) return;
+    const res = await apiFetch(`/api/admin/stations/${id}`, { method: 'DELETE' });
+    if (!res || !res.ok) { alert('Delete failed.'); return; }
+
+    stationsByHall[hall] = stationsByHall[hall].filter(s => s.id !== id);
+    renderStations(hall);
+    populateStationDropdown(hall);
+    await loadFixedItems(hall);
+    renderFixedItems(hall);
+  }
+
+  // ---- FIXED ITEMS ----
+  async function loadFixedItems(hall) {
+    const hallObj = fixedHalls[hall];
+    if (!hallObj) return;
+    const res = await apiFetch(`/api/admin/fixed-items?dining_hall_id=${hallObj.id}`);
+    if (!res) return;
+    fixedItemsByHall[hall] = await res.json();
+  }
+
+  function renderFixedItems(hall) {
+    const tbody = document.getElementById('fixed-items-tbody');
+    const items = fixedItemsByHall[hall] || [];
+    document.getElementById('fixed-items-count').textContent = `${items.length} items`;
+
+    if (items.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="9" class="empty">No items yet. Add one above.</td></tr>';
+      return;
+    }
+
+    const grouped = {};
+    items.forEach(item => {
+      const key = item.station_name || 'No Station';
+      if (!grouped[key]) grouped[key] = [];
+      grouped[key].push(item);
+    });
+
+    let html = '';
+    Object.entries(grouped).forEach(([stationName, stationItems]) => {
+      html += `<tr><td colspan="9" class="station-group-label">${escHtml(stationName)}</td></tr>`;
+      stationItems.forEach(item => {
+        const cal = item.override_calories ?? item.scraped_calories;
+        const pro = item.override_protein ?? item.scraped_protein;
+        const carb = item.override_carbs ?? item.scraped_carbs;
+        const fat = item.override_fat ?? item.scraped_fat;
+        const serving = item.override_serving_size ?? item.scraped_serving_size;
+        html += `
+          <tr>
+            <td><div class="item-name">${escHtml(item.name)}</div></td>
+            <td>${escHtml(item.station_name)}</td>
+            <td>${item.meal_type || '—'}</td>
+            <td>${cal ?? '<span style="color:#e53e3e;font-style:italic">—</span>'}</td>
+            <td>${pro ?? '—'}</td>
+            <td>${carb ?? '—'}</td>
+            <td>${fat ?? '—'}</td>
+            <td>${escHtml(serving) || '—'}</td>
+            <td><button class="delete-btn" onclick="deleteFixedItem(${item.id}, '${hall}')">Delete</button></td>
+          </tr>
+        `;
+      });
+    });
+
+    tbody.innerHTML = html;
+  }
+
+  async function addFixedItem() {
+    const msgEl = document.getElementById('add-item-msg');
+    msgEl.textContent = '';
+
+    const name = document.getElementById('new-item-name').value.trim();
+    const stationId = document.getElementById('new-item-station').value;
+    const mealType = document.getElementById('new-item-meal').value;
+    const cal = document.getElementById('new-item-cal').value;
+    const pro = document.getElementById('new-item-pro').value;
+    const carb = document.getElementById('new-item-carb').value;
+    const fat = document.getElementById('new-item-fat').value;
+    const serving = document.getElementById('new-item-serving').value.trim();
+
+    if (!name) { msgEl.innerHTML = '<span class="form-error">Item name is required.</span>'; return; }
+    if (!stationId) { msgEl.innerHTML = '<span class="form-error">Please select a station.</span>'; return; }
+
+    const body = {
+      station_id: parseInt(stationId),
+      name,
+      meal_type: mealType,
+      calories: cal !== '' ? parseInt(cal) : null,
+      protein: pro !== '' ? parseInt(pro) : null,
+      carbs: carb !== '' ? parseInt(carb) : null,
+      fat: fat !== '' ? parseInt(fat) : null,
+      serving_size: serving || null,
+    };
+
+    const res = await apiFetch('/api/admin/fixed-items', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+
+    if (!res || !res.ok) {
+      const err = await res.json();
+      msgEl.innerHTML = `<span class="form-error">${err.error || 'Failed to add item.'}</span>`;
+      return;
+    }
+
+    document.getElementById('new-item-name').value = '';
+    document.getElementById('new-item-cal').value = '';
+    document.getElementById('new-item-pro').value = '';
+    document.getElementById('new-item-carb').value = '';
+    document.getElementById('new-item-fat').value = '';
+    document.getElementById('new-item-serving').value = '';
+    msgEl.innerHTML = '<span class="form-success">✓ Item added.</span>';
+    setTimeout(() => msgEl.textContent = '', 3000);
+
+    await loadFixedItems(currentHall);
+    renderFixedItems(currentHall);
+  }
+
+  async function deleteFixedItem(id, hall) {
+    if (!confirm('Delete this item?')) return;
+    const res = await apiFetch(`/api/admin/fixed-items/${id}`, { method: 'DELETE' });
+    if (!res || !res.ok) { alert('Delete failed.'); return; }
+    await loadFixedItems(hall);
+    renderFixedItems(hall);
+  }
+
+  // ---- NUTRITION REVIEW ----
   async function loadStats() {
     const res = await apiFetch('/api/admin/stats');
     if (!res) return;
@@ -515,7 +1078,6 @@
     document.getElementById('stat-total').textContent = data.total;
   }
 
-  // ---- FILTER BUTTONS ----
   function setFilter(status) {
     currentFilter = status;
     ['all', 'pending', 'overridden', 'reviewed'].forEach(f => {
@@ -530,7 +1092,6 @@
     debounceTimer = setTimeout(loadItems, 300);
   }
 
-  // ---- LOAD ITEMS ----
   async function loadItems() {
     const tbody = document.getElementById('items-tbody');
     tbody.innerHTML = '<tr><td colspan="10" class="loading">Loading...</td></tr>';
@@ -538,7 +1099,6 @@
 
     const search = document.getElementById('search-input').value;
     const diningHallId = document.getElementById('hall-filter').value;
-
     const params = new URLSearchParams();
     if (currentFilter) params.set('status', currentFilter);
     if (diningHallId) params.set('dining_hall_id', diningHallId);
@@ -547,12 +1107,10 @@
     const res = await apiFetch(`/api/admin/menu-items?${params}`);
     if (!res) return;
     allItems = await res.json();
-
     document.getElementById('count-label').textContent = `${allItems.length} items`;
     renderItems(allItems);
   }
 
-  // ---- RENDER ----
   function renderItems(items) {
     const tbody = document.getElementById('items-tbody');
     if (items.length === 0) {
@@ -571,9 +1129,7 @@
 
     return `
       <tr id="row-${item.id}">
-        <td>
-          <div class="item-name">${escHtml(item.name)}</div>
-        </td>
+        <td><div class="item-name">${escHtml(item.name)}</div></td>
         <td>
           <div>${escHtml(item.dining_hall_name)}</div>
           <div class="item-sub">${escHtml(item.station_name)}</div>
@@ -585,25 +1141,17 @@
         <td class="nutrition-cell">${fat}</td>
         <td class="nutrition-cell">${serving}</td>
         <td><span class="badge ${item.admin_review_status}">${item.admin_review_status}</span></td>
-        <td>
-          <button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button>
-        </td>
+        <td><button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button></td>
       </tr>
       <tr id="edit-row-${item.id}" class="edit-row" style="display:none;">
-        <td colspan="10">
-          ${renderEditForm(item)}
-        </td>
+        <td colspan="10">${renderEditForm(item)}</td>
       </tr>
     `;
   }
 
   function renderNutritionCell(override, scraped, isText = false) {
-    if (override != null && override !== '') {
-      return `<span class="override">${escHtml(String(override))}</span>`;
-    }
-    if (scraped == null) {
-      return `<span class="null-val">missing</span>`;
-    }
+    if (override != null && override !== '') return `<span class="override">${escHtml(String(override))}</span>`;
+    if (scraped == null) return `<span class="null-val">missing</span>`;
     return `<span class="scraped">${escHtml(String(scraped))}</span>`;
   }
 
@@ -612,33 +1160,23 @@
       <div class="edit-form">
         <div class="field">
           <label>Calories</label>
-          <input type="number" id="edit-cal-${item.id}"
-            value="${item.override_calories ?? ''}"
-            placeholder="${item.scraped_calories ?? 'null'}" />
+          <input type="number" id="edit-cal-${item.id}" value="${item.override_calories ?? ''}" placeholder="${item.scraped_calories ?? 'null'}" />
         </div>
         <div class="field">
           <label>Protein (g)</label>
-          <input type="number" id="edit-pro-${item.id}"
-            value="${item.override_protein ?? ''}"
-            placeholder="${item.scraped_protein ?? 'null'}" />
+          <input type="number" id="edit-pro-${item.id}" value="${item.override_protein ?? ''}" placeholder="${item.scraped_protein ?? 'null'}" />
         </div>
         <div class="field">
           <label>Carbs (g)</label>
-          <input type="number" id="edit-carb-${item.id}"
-            value="${item.override_carbs ?? ''}"
-            placeholder="${item.scraped_carbs ?? 'null'}" />
+          <input type="number" id="edit-carb-${item.id}" value="${item.override_carbs ?? ''}" placeholder="${item.scraped_carbs ?? 'null'}" />
         </div>
         <div class="field">
           <label>Fat (g)</label>
-          <input type="number" id="edit-fat-${item.id}"
-            value="${item.override_fat ?? ''}"
-            placeholder="${item.scraped_fat ?? 'null'}" />
+          <input type="number" id="edit-fat-${item.id}" value="${item.override_fat ?? ''}" placeholder="${item.scraped_fat ?? 'null'}" />
         </div>
         <div class="field">
           <label>Serving Size</label>
-          <input type="text" id="edit-serving-${item.id}" class="wide"
-            value="${item.override_serving_size ?? ''}"
-            placeholder="${item.scraped_serving_size ?? 'null'}" />
+          <input type="text" id="edit-serving-${item.id}" class="wide" value="${item.override_serving_size ?? ''}" placeholder="${item.scraped_serving_size ?? 'null'}" />
         </div>
         <div class="field">
           <label>Status</label>
@@ -650,11 +1188,7 @@
         </div>
       </div>
       <div class="scraped-hint">
-        Scraped values (placeholders): cal ${item.scraped_calories ?? 'null'} ·
-        pro ${item.scraped_protein ?? 'null'}g ·
-        carb ${item.scraped_carbs ?? 'null'}g ·
-        fat ${item.scraped_fat ?? 'null'}g ·
-        serving ${item.scraped_serving_size ?? 'null'}
+        Scraped values: cal ${item.scraped_calories ?? 'null'} · pro ${item.scraped_protein ?? 'null'}g · carb ${item.scraped_carbs ?? 'null'}g · fat ${item.scraped_fat ?? 'null'}g · serving ${item.scraped_serving_size ?? 'null'}
       </div>
       <div class="edit-actions" style="margin-top:12px;">
         <button class="btn-save" onclick="saveItem(${item.id})">Save</button>
@@ -665,12 +1199,10 @@
     `;
   }
 
-  // ---- EDIT ACTIONS ----
   function toggleEdit(id) {
     if (editingId && editingId !== id) {
       document.getElementById(`edit-row-${editingId}`).style.display = 'none';
     }
-
     const editRow = document.getElementById(`edit-row-${id}`);
     const isOpen = editRow.style.display !== 'none';
     editRow.style.display = isOpen ? 'none' : 'table-row';
@@ -694,39 +1226,27 @@
       admin_review_status: status,
     };
 
-    const res = await apiFetch(`/api/admin/menu-items/${id}`, {
-      method: 'PUT',
-      body: JSON.stringify(body)
-    });
-
+    const res = await apiFetch(`/api/admin/menu-items/${id}`, { method: 'PUT', body: JSON.stringify(body) });
     if (!res || !res.ok) { alert('Save failed.'); return; }
     const updated = await res.json();
 
     const idx = allItems.findIndex(i => i.id === id);
-    if (idx !== -1) {
-      allItems[idx] = { ...allItems[idx], ...updated };
-      updateRow(allItems[idx]);
-    }
+    if (idx !== -1) { allItems[idx] = { ...allItems[idx], ...updated }; updateRow(allItems[idx]); }
 
     const successEl = document.getElementById(`save-success-${id}`);
     successEl.classList.add('show');
     setTimeout(() => successEl.classList.remove('show'), 2000);
-
     await loadStats();
   }
 
   async function clearOverrides(id) {
     if (!confirm('Clear all overrides and revert to scraped values?')) return;
-
     const res = await apiFetch(`/api/admin/menu-items/${id}/overrides`, { method: 'DELETE' });
     if (!res || !res.ok) { alert('Failed.'); return; }
     const updated = await res.json();
 
     const idx = allItems.findIndex(i => i.id === id);
-    if (idx !== -1) {
-      allItems[idx] = { ...allItems[idx], ...updated };
-      updateRow(allItems[idx]);
-    }
+    if (idx !== -1) { allItems[idx] = { ...allItems[idx], ...updated }; updateRow(allItems[idx]); }
 
     document.getElementById(`edit-row-${id}`).style.display = 'none';
     editingId = null;
@@ -746,14 +1266,9 @@
     }
   }
 
-  // ---- UTILS ----
   function escHtml(str) {
     if (str == null) return '—';
-    return String(str)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
   document.getElementById('login-password').addEventListener('keydown', e => {
