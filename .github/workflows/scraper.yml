@@ -2,46 +2,18 @@ name: Daily Menu Scraper
 
 on:
   schedule:
-    # Runs every day at 6:00 AM EST (11:00 AM UTC)
-    - cron: '0 11 * * *'
-  workflow_dispatch: # Allows manual triggering from GitHub Actions tab
+    - cron: '0 11 * * *'  # 6am EST daily
+  workflow_dispatch:  # allows manual trigger from GitHub UI
 
 jobs:
-  scrape-menus:
+  scrape:
     runs-on: ubuntu-latest
-    
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
         with:
           node-version: '18'
-          cache: 'npm'
-      
-      - name: Install dependencies
-        run: npm install
-      
-      - name: Install Chromium for Puppeteer
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y chromium-browser
-      
-      - name: Run scraper
+      - run: npm install
+      - run: node scraper.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          PUPPETEER_SKIP_CHROMIUM_DOWNLOAD: 'true'
-          PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium-browser
-        run: node run-scraper.js
-      
-      - name: Notify on success
-        if: success()
-        run: echo "✅ Menu scraping completed successfully"
-      
-      - name: Notify on failure
-        if: failure()
-        run: |
-          echo "❌ Menu scraping failed. Check the logs above for details."
-          exit 1
