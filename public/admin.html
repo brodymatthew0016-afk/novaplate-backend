@@ -126,6 +126,7 @@
     .stat-card.pending .value { color: #d97706; }
     .stat-card.overridden .value { color: #003087; }
     .stat-card.reviewed .value { color: #16a34a; }
+    .stat-card.needs-count .value { color: #9333ea; }
 
     /* ---- CONTROLS ---- */
     .controls {
@@ -214,6 +215,7 @@
     .badge.pending { background: #fef3c7; color: #92400e; }
     .badge.reviewed { background: #dcfce7; color: #166534; }
     .badge.overridden { background: #dbeafe; color: #1e40af; }
+    .badge.needs_count { background: #f3e8ff; color: #6b21a8; }
 
     .item-name { font-weight: 500; }
     .item-sub { font-size: 12px; color: #888; margin-top: 2px; }
@@ -619,6 +621,10 @@
         <div class="label">Reviewed</div>
         <div class="value" id="stat-reviewed">—</div>
       </div>
+      <div class="stat-card needs-count">
+        <div class="label">Needs Count</div>
+        <div class="value" id="stat-needs-count">—</div>
+      </div>
       <div class="stat-card">
         <div class="label">Total Items</div>
         <div class="value" id="stat-total">—</div>
@@ -634,6 +640,7 @@
       <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Needs Review</button>
       <button class="filter-btn" id="filter-overridden" onclick="setFilter('overridden')">Overridden</button>
       <button class="filter-btn" id="filter-reviewed" onclick="setFilter('reviewed')">Reviewed</button>
+      <button class="filter-btn" id="filter-needs_count" onclick="setFilter('needs_count')">Needs Count</button>
       <span class="count-label" id="count-label"></span>
     </div>
 
@@ -1090,12 +1097,13 @@
     document.getElementById('stat-pending').textContent = data.pending;
     document.getElementById('stat-overridden').textContent = data.overridden;
     document.getElementById('stat-reviewed').textContent = data.reviewed;
+    document.getElementById('stat-needs-count').textContent = data.needs_count;
     document.getElementById('stat-total').textContent = data.total;
   }
 
   function setFilter(status) {
     currentFilter = status;
-    ['all', 'pending', 'overridden', 'reviewed'].forEach(f => {
+    ['all', 'pending', 'overridden', 'reviewed', 'needs_count'].forEach(f => {
       document.getElementById(`filter-${f}`).classList.toggle('active',
         (f === 'all' && status === '') || f === status);
     });
@@ -1208,9 +1216,10 @@
         <div class="field">
           <label>Status</label>
           <select id="edit-status-${item.id}">
-            <option value="pending"    ${item.admin_review_status === 'pending'    ? 'selected' : ''}>Pending</option>
-            <option value="reviewed"   ${item.admin_review_status === 'reviewed'   ? 'selected' : ''}>Reviewed</option>
-            <option value="overridden" ${item.admin_review_status === 'overridden' ? 'selected' : ''}>Overridden</option>
+            <option value="pending"     ${item.admin_review_status === 'pending'     ? 'selected' : ''}>Pending</option>
+            <option value="reviewed"    ${item.admin_review_status === 'reviewed'    ? 'selected' : ''}>Reviewed</option>
+            <option value="overridden"  ${item.admin_review_status === 'overridden'  ? 'selected' : ''}>Overridden</option>
+            <option value="needs_count" ${item.admin_review_status === 'needs_count' ? 'selected' : ''}>Needs Count</option>
           </select>
         </div>
       </div>
