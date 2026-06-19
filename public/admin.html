@@ -164,6 +164,7 @@
     }
 
     .filter-btn.active { background: #003087; color: white; border-color: #003087; }
+    .filter-btn:hover:not(.active) { color: #333; }
     .count-label { font-size: 13px; color: #666; margin-left: auto; }
 
     /* ---- TABLE ---- */
@@ -216,10 +217,20 @@
 
     .item-name { font-weight: 500; }
     .item-sub { font-size: 12px; color: #888; margin-top: 2px; }
-    .nutrition-cell { font-size: 13px; }
+    .nutrition-cell { font-size: 13px; cursor: pointer; }
+    .nutrition-cell:hover { background: #f0f5ff !important; }
     .nutrition-cell .override { color: #003087; font-weight: 600; }
     .nutrition-cell .scraped { color: #999; }
     .nutrition-cell .null-val { color: #e53e3e; font-style: italic; }
+
+    .mfp-link {
+      color: #aaa;
+      font-size: 10px;
+      text-decoration: none;
+      margin-left: 5px;
+      font-weight: 400;
+    }
+    .mfp-link:hover { color: #003087; }
 
     .edit-row td { background: #f0f5ff; padding: 16px; }
 
@@ -312,6 +323,20 @@
     }
 
     .edit-btn:hover { border-color: #003087; color: #003087; background: #f0f5ff; }
+
+    .quick-review-btn {
+      padding: 5px 10px;
+      background: transparent;
+      border: 1px solid #16a34a;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      color: #16a34a;
+      margin-left: 6px;
+    }
+
+    .quick-review-btn:hover { background: #dcfce7; }
+
     .scraped-hint { font-size: 11px; color: #888; margin-top: 6px; }
     .loading { text-align: center; padding: 60px; color: #888; font-size: 15px; }
     .empty { text-align: center; padding: 60px; color: #aaa; font-size: 15px; }
@@ -354,7 +379,6 @@
 
     .hall-tab-btn.active { background: #003087; color: white; border-color: #003087; }
 
-    /* two-column layout */
     .fixed-menus-layout {
       display: grid;
       grid-template-columns: 280px 1fr;
@@ -1112,27 +1136,39 @@
   }
 
   function renderItemRow(item) {
-    const cal = renderNutritionCell(item.override_calories, item.scraped_calories);
-    const pro = renderNutritionCell(item.override_protein, item.scraped_protein);
-    const carb = renderNutritionCell(item.override_carbs, item.scraped_carbs);
-    const fat = renderNutritionCell(item.override_fat, item.scraped_fat);
+    const cal     = renderNutritionCell(item.override_calories,     item.scraped_calories);
+    const pro     = renderNutritionCell(item.override_protein,      item.scraped_protein);
+    const carb    = renderNutritionCell(item.override_carbs,        item.scraped_carbs);
+    const fat     = renderNutritionCell(item.override_fat,          item.scraped_fat);
     const serving = renderNutritionCell(item.override_serving_size, item.scraped_serving_size, true);
+
+    const mfpUrl = `https://www.myfitnesspal.com/food/search?search=${encodeURIComponent(item.name)}`;
+
+    const showQuickReview = item.admin_review_status === 'pending';
 
     return `
       <tr id="row-${item.id}">
-        <td><div class="item-name">${escHtml(item.name)}</div></td>
+        <td>
+          <div class="item-name">
+            ${escHtml(item.name)}
+            <a href="${mfpUrl}" target="_blank" class="mfp-link" title="Search MyFitnessPal">↗ MFP</a>
+          </div>
+        </td>
         <td>
           <div>${escHtml(item.dining_hall_name)}</div>
           <div class="item-sub">${escHtml(item.station_name)}</div>
         </td>
         <td>${item.meal_type || '—'}</td>
-        <td class="nutrition-cell">${cal}</td>
-        <td class="nutrition-cell">${pro}</td>
-        <td class="nutrition-cell">${carb}</td>
-        <td class="nutrition-cell">${fat}</td>
-        <td class="nutrition-cell">${serving}</td>
+        <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'calories', this)" title="Click to edit">${cal}</td>
+        <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'protein', this)" title="Click to edit">${pro}</td>
+        <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'carbs', this)" title="Click to edit">${carb}</td>
+        <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'fat', this)" title="Click to edit">${fat}</td>
+        <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'serving', this)" title="Click to edit">${serving}</td>
         <td><span class="badge ${item.admin_review_status}">${item.admin_review_status}</span></td>
-        <td><button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button></td>
+        <td style="white-space:nowrap;">
+          <button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button>
+          ${showQuickReview ? `<button class="quick-review-btn" onclick="quickReview(${item.id})" title="Mark as reviewed">✓</button>` : ''}
+        </td>
       </tr>
       <tr id="edit-row-${item.id}" class="edit-row" style="display:none;">
         <td colspan="10">${renderEditForm(item)}</td>
@@ -1172,8 +1208,8 @@
         <div class="field">
           <label>Status</label>
           <select id="edit-status-${item.id}">
-            <option value="pending" ${item.admin_review_status === 'pending' ? 'selected' : ''}>Pending</option>
-            <option value="reviewed" ${item.admin_review_status === 'reviewed' ? 'selected' : ''}>Reviewed</option>
+            <option value="pending"    ${item.admin_review_status === 'pending'    ? 'selected' : ''}>Pending</option>
+            <option value="reviewed"   ${item.admin_review_status === 'reviewed'   ? 'selected' : ''}>Reviewed</option>
             <option value="overridden" ${item.admin_review_status === 'overridden' ? 'selected' : ''}>Overridden</option>
           </select>
         </div>
@@ -1200,21 +1236,114 @@
     editingId = isOpen ? null : id;
   }
 
+  async function quickReview(id) {
+    const item = allItems.find(i => i.id === id);
+    if (!item) return;
+    const body = {
+      override_calories:     item.override_calories     ?? null,
+      override_protein:      item.override_protein      ?? null,
+      override_carbs:        item.override_carbs        ?? null,
+      override_fat:          item.override_fat          ?? null,
+      override_serving_size: item.override_serving_size ?? null,
+      admin_review_status:   'reviewed',
+    };
+    const res = await apiFetch(`/api/admin/menu-items/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    if (!res || !res.ok) { alert('Save failed.'); return; }
+    const updated = await res.json();
+    const idx = allItems.findIndex(i => i.id === id);
+    if (idx !== -1) { allItems[idx] = { ...allItems[idx], ...updated }; updateRow(allItems[idx]); }
+    await loadStats();
+  }
+
+  function startInlineEdit(id, field, cell) {
+    if (cell.querySelector('input')) return;
+
+    const item = allItems.find(i => i.id === id);
+    if (!item) return;
+
+    const fieldMap = {
+      calories: 'override_calories',
+      protein:  'override_protein',
+      carbs:    'override_carbs',
+      fat:      'override_fat',
+      serving:  'override_serving_size',
+    };
+    const scrapedMap = {
+      calories: 'scraped_calories',
+      protein:  'scraped_protein',
+      carbs:    'scraped_carbs',
+      fat:      'scraped_fat',
+      serving:  'scraped_serving_size',
+    };
+
+    const currentVal = item[fieldMap[field]] ?? '';
+    const placeholder = item[scrapedMap[field]] ?? '';
+    const isText = field === 'serving';
+
+    const original = cell.innerHTML;
+    cell.innerHTML = `<input
+      type="${isText ? 'text' : 'number'}"
+      value="${escHtml(String(currentVal))}"
+      placeholder="${escHtml(String(placeholder))}"
+      style="width:${isText ? '110px' : '70px'}; padding:3px 6px; border:1px solid #003087; border-radius:4px; font-size:13px;"
+      onclick="event.stopPropagation()"
+    />`;
+
+    const input = cell.querySelector('input');
+    input.focus();
+    input.select();
+
+    let committed = false;
+
+    async function commit() {
+      if (committed) return;
+      committed = true;
+      const newVal = input.value.trim();
+      const body = {
+        override_calories:     item.override_calories     ?? null,
+        override_protein:      item.override_protein      ?? null,
+        override_carbs:        item.override_carbs        ?? null,
+        override_fat:          item.override_fat          ?? null,
+        override_serving_size: item.override_serving_size ?? null,
+        admin_review_status:   item.admin_review_status,
+      };
+      body[fieldMap[field]] = newVal !== '' ? (isText ? newVal : parseInt(newVal)) : null;
+
+      const res = await apiFetch(`/api/admin/menu-items/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+      if (!res || !res.ok) { cell.innerHTML = original; alert('Save failed.'); return; }
+      const updated = await res.json();
+      const idx = allItems.findIndex(i => i.id === id);
+      if (idx !== -1) { allItems[idx] = { ...allItems[idx], ...updated }; updateRow(allItems[idx]); }
+      await loadStats();
+    }
+
+    function cancel() {
+      if (committed) return;
+      cell.innerHTML = original;
+    }
+
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Enter')  { e.preventDefault(); commit(); }
+      if (e.key === 'Escape') { e.preventDefault(); committed = true; cancel(); }
+    });
+    input.addEventListener('blur', () => setTimeout(cancel, 150));
+  }
+
   async function saveItem(id) {
-    const cal = document.getElementById(`edit-cal-${id}`).value;
-    const pro = document.getElementById(`edit-pro-${id}`).value;
-    const carb = document.getElementById(`edit-carb-${id}`).value;
-    const fat = document.getElementById(`edit-fat-${id}`).value;
+    const cal     = document.getElementById(`edit-cal-${id}`).value;
+    const pro     = document.getElementById(`edit-pro-${id}`).value;
+    const carb    = document.getElementById(`edit-carb-${id}`).value;
+    const fat     = document.getElementById(`edit-fat-${id}`).value;
     const serving = document.getElementById(`edit-serving-${id}`).value;
-    const status = document.getElementById(`edit-status-${id}`).value;
+    const status  = document.getElementById(`edit-status-${id}`).value;
 
     const body = {
-      override_calories: cal !== '' ? parseInt(cal) : null,
-      override_protein: pro !== '' ? parseInt(pro) : null,
-      override_carbs: carb !== '' ? parseInt(carb) : null,
-      override_fat: fat !== '' ? parseInt(fat) : null,
-      override_serving_size: serving !== '' ? serving : null,
-      admin_review_status: status,
+      override_calories:     cal     !== '' ? parseInt(cal)  : null,
+      override_protein:      pro     !== '' ? parseInt(pro)  : null,
+      override_carbs:        carb    !== '' ? parseInt(carb) : null,
+      override_fat:          fat     !== '' ? parseInt(fat)  : null,
+      override_serving_size: serving !== '' ? serving        : null,
+      admin_review_status:   status,
     };
 
     const res = await apiFetch(`/api/admin/menu-items/${id}`, { method: 'PUT', body: JSON.stringify(body) });
