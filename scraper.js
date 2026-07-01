@@ -17,6 +17,10 @@ const MEAL_TYPES = ['BREAKFAST', 'BRUNCH', 'LUNCH', 'DINNER', 'LATE NIGHT'];
 
 const PROXY_URL = 'https://webapps.villanova.edu/dininghallmenu/form_confirmation_proxy.jsp?template=no';
 
+// In-memory cache so each unique Nutrislice food id is only fetched once
+// per scraper run, even though the same item appears on many days/meals.
+const ingredientsCache = {};
+
 // Convert YYYY-MM-DD to MM/DD/YYYY for the Villanova API
 function toVillanovaDate(dateStr) {
   const [year, month, day] = dateStr.split('-');
@@ -42,6 +46,38 @@ async function fetchMenuJson(hallName, mealType, dateStr) {
   return res.json();
 }
 
+// Fetches and caches the ingredients list for a single Nutrislice food id.
+// Returns null (not throw) on any failure so one bad lookup never aborts
+// the whole scrape run.
+async function fetchIngredients(villanovaFoodId) {
+  if (!villanovaFoodId) return null;
+
+  if (Object.prototype.hasOwnProperty.call(ingredientsCache, villanovaFoodId)) {
+    return ingredientsCache[villanovaFoodId];
+  }
+
+  let ingredients = null;
+  try {
+    const body = `command=Ingredients&id=${encodeURIComponent(villanovaFoodId)}`;
+    const res = await fetch(PROXY_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    if (res.ok) {
+      const json = await res.json();
+      if (Array.isArray(json.ingredients) && json.ingredients.length > 0) {
+        ingredients = json.ingredients.join(', ');
+      }
+    }
+  } catch (err) {
+    console.error(`  Ingredients fetch failed for food id ${villanovaFoodId}:`, err.message);
+  }
+
+  ingredientsCache[villanovaFoodId] = ingredients;
+  return ingredients;
+}
+
 // Stations have no numeric ID in this API — use name as the unique key
 async function upsertStation(client, diningHallId, name) {
   const result = await client.query(
@@ -60,8 +96,9 @@ async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType
     `INSERT INTO menu_items_master
        (station_id, name, meal_type, nutrition_source, nutrition_status,
         scraped_calories, scraped_protein, scraped_carbs, scraped_fat, scraped_serving_size,
+        scraped_ingredients,
         nutrislice_food_id, is_active, admin_review_status)
-     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, true, 'pending')
+     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, $10, true, 'pending')
       ON CONFLICT (station_id, name)     DO UPDATE SET
        name = EXCLUDED.name,
        meal_type = EXCLUDED.meal_type,
@@ -70,6 +107,7 @@ async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType
        scraped_carbs = EXCLUDED.scraped_carbs,
        scraped_fat = EXCLUDED.scraped_fat,
        scraped_serving_size = EXCLUDED.scraped_serving_size,
+       scraped_ingredients = EXCLUDED.scraped_ingredients,
        is_active = true,
        updated_at = CURRENT_TIMESTAMP,
        admin_review_status = CASE
@@ -86,7 +124,7 @@ async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType
     [
       stationId, name, mealType,
       nutrition.calories, nutrition.protein, nutrition.carbs, nutrition.fat,
-      nutrition.servingSize, villanovaFoodId
+      nutrition.servingSize, nutrition.ingredients, villanovaFoodId
     ]
   );
   return result.rows[0].id;
@@ -124,6 +162,8 @@ async function scrapeDiningHallMealType(client, diningHallId, hallName, mealType
       : mealType === 'BRUNCH' ? 'breakfast'
       : mealType.toLowerCase();
 
+    const ingredients = await fetchIngredients(item.id);
+
     const itemId = await upsertMenuItem(
       client,
       stationId,
@@ -136,6 +176,7 @@ async function scrapeDiningHallMealType(client, diningHallId, hallName, mealType
         carbs:       item.carbohydrate != null ? Math.round(item.carbohydrate) : null,
         fat:         item.fat         != null ? Math.round(item.fat)         : null,
         servingSize: item.portion     || null,
+        ingredients: ingredients,
       }
     );
 

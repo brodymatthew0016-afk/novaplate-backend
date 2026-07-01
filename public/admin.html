@@ -225,6 +225,16 @@
     .nutrition-cell .scraped { color: #999; }
     .nutrition-cell .null-val { color: #e53e3e; font-style: italic; }
 
+    .ingredients-cell {
+      font-size: 12px;
+      color: #666;
+      max-width: 220px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .ingredients-cell.none { color: #bbb; font-style: italic; }
+
     .mfp-link {
       color: #aaa;
       font-size: 10px;
@@ -340,6 +350,15 @@
     .quick-review-btn:hover { background: #dcfce7; }
 
     .scraped-hint { font-size: 11px; color: #888; margin-top: 6px; }
+    .ingredients-hint {
+      font-size: 12px;
+      color: #555;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid #dbe4ff;
+      line-height: 1.5;
+    }
+    .ingredients-hint strong { color: #333; }
     .loading { text-align: center; padding: 60px; color: #888; font-size: 15px; }
     .empty { text-align: center; padding: 60px; color: #aaa; font-size: 15px; }
 
@@ -656,12 +675,13 @@
             <th>Carbs</th>
             <th>Fat</th>
             <th>Serving</th>
+            <th>Ingredients</th>
             <th>Status</th>
             <th></th>
           </tr>
         </thead>
         <tbody id="items-tbody">
-          <tr><td colspan="10" class="loading">Loading...</td></tr>
+          <tr><td colspan="11" class="loading">Loading...</td></tr>
         </tbody>
       </table>
     </div>
@@ -757,11 +777,12 @@
                   <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Carbs</th>
                   <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Fat</th>
                   <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Serving</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Ingredients</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody id="fixed-items-tbody">
-                <tr><td colspan="9" class="loading">Loading...</td></tr>
+                <tr><td colspan="10" class="loading">Loading...</td></tr>
               </tbody>
             </table>
           </div>
@@ -991,7 +1012,7 @@
     document.getElementById('fixed-items-count').textContent = `${items.length} items`;
 
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">No items yet. Add one above.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="10" class="empty">No items yet. Add one above.</td></tr>';
       return;
     }
 
@@ -1004,13 +1025,17 @@
 
     let html = '';
     Object.entries(grouped).forEach(([stationName, stationItems]) => {
-      html += `<tr><td colspan="9" class="station-group-label">${escHtml(stationName)}</td></tr>`;
+      html += `<tr><td colspan="10" class="station-group-label">${escHtml(stationName)}</td></tr>`;
       stationItems.forEach(item => {
         const cal = item.override_calories ?? item.scraped_calories;
         const pro = item.override_protein ?? item.scraped_protein;
         const carb = item.override_carbs ?? item.scraped_carbs;
         const fat = item.override_fat ?? item.scraped_fat;
         const serving = item.override_serving_size ?? item.scraped_serving_size;
+        const ingredientsTitle = item.scraped_ingredients ? escHtml(item.scraped_ingredients) : '';
+        const ingredientsText = item.scraped_ingredients
+          ? escHtml(item.scraped_ingredients)
+          : '<span style="color:#bbb;font-style:italic;">—</span>';
         html += `
           <tr>
             <td><div class="item-name">${escHtml(item.name)}</div></td>
@@ -1021,6 +1046,7 @@
             <td>${carb ?? '—'}</td>
             <td>${fat ?? '—'}</td>
             <td>${escHtml(serving) || '—'}</td>
+            <td class="ingredients-cell${item.scraped_ingredients ? '' : ' none'}" title="${ingredientsTitle}">${ingredientsText}</td>
             <td><button class="delete-btn" onclick="deleteFixedItem(${item.id}, '${hall}')">Delete</button></td>
           </tr>
         `;
@@ -1117,7 +1143,7 @@
 
   async function loadItems() {
     const tbody = document.getElementById('items-tbody');
-    tbody.innerHTML = '<tr><td colspan="10" class="loading">Loading...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" class="loading">Loading...</td></tr>';
     editingId = null;
 
     const search = document.getElementById('search-input').value;
@@ -1137,7 +1163,7 @@
   function renderItems(items) {
     const tbody = document.getElementById('items-tbody');
     if (items.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="10" class="empty">No items found.</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="11" class="empty">No items found.</td></tr>';
       return;
     }
     tbody.innerHTML = items.map(item => renderItemRow(item)).join('');
@@ -1153,6 +1179,11 @@
     const mfpUrl = `https://www.myfitnesspal.com/food/search?search=${encodeURIComponent(item.name)}`;
 
     const showQuickReview = item.admin_review_status === 'pending';
+
+    const ingredientsTitle = item.scraped_ingredients ? escHtml(item.scraped_ingredients) : '';
+    const ingredientsText = item.scraped_ingredients
+      ? escHtml(item.scraped_ingredients)
+      : '—';
 
     return `
       <tr id="row-${item.id}">
@@ -1172,6 +1203,7 @@
         <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'carbs', this)" title="Click to edit">${carb}</td>
         <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'fat', this)" title="Click to edit">${fat}</td>
         <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'serving', this)" title="Click to edit">${serving}</td>
+        <td class="ingredients-cell${item.scraped_ingredients ? '' : ' none'}" title="${ingredientsTitle}">${ingredientsText}</td>
         <td><span class="badge ${item.admin_review_status}">${item.admin_review_status}</span></td>
         <td style="white-space:nowrap;">
           <button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button>
@@ -1179,7 +1211,7 @@
         </td>
       </tr>
       <tr id="edit-row-${item.id}" class="edit-row" style="display:none;">
-        <td colspan="10">${renderEditForm(item)}</td>
+        <td colspan="11">${renderEditForm(item)}</td>
       </tr>
     `;
   }
@@ -1191,6 +1223,10 @@
   }
 
   function renderEditForm(item) {
+    const ingredientsBlock = item.scraped_ingredients
+      ? `<div class="ingredients-hint"><strong>Ingredients (scraped, read-only):</strong> ${escHtml(item.scraped_ingredients)}</div>`
+      : `<div class="ingredients-hint"><strong>Ingredients:</strong> not available from scraper</div>`;
+
     return `
       <div class="edit-form">
         <div class="field">
@@ -1226,6 +1262,7 @@
       <div class="scraped-hint">
         Scraped values: cal ${item.scraped_calories ?? 'null'} · pro ${item.scraped_protein ?? 'null'}g · carb ${item.scraped_carbs ?? 'null'}g · fat ${item.scraped_fat ?? 'null'}g · serving ${item.scraped_serving_size ?? 'null'}
       </div>
+      ${ingredientsBlock}
       <div class="edit-actions" style="margin-top:12px;">
         <button class="btn-save" onclick="saveItem(${item.id})">Save</button>
         <button class="btn-clear" onclick="clearOverrides(${item.id})">Clear Overrides</button>
