@@ -492,8 +492,8 @@ app.put('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, r
         override_fat = $4, override_serving_size = $5, admin_review_status = $6,
         nutrition_status = $7, updated_at = CURRENT_TIMESTAMP
        WHERE id = $8 RETURNING *`,
-      [override_calories || null, override_protein || null, override_carbs || null,
-       override_fat || null, override_serving_size || null, status,
+      [override_calories ?? null, override_protein ?? null, override_carbs ?? null,
+       override_fat ?? null, override_serving_size ?? null, status,
        hasOverrides ? 'overridden' : 'accepted', id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
