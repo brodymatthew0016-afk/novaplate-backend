@@ -143,7 +143,6 @@ app.get('/api/admin/fixed-items', authenticateToken, adminOnly, async (req, res)
       SELECT
         mi.id, mi.name, mi.meal_type,
         mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
-        mi.scraped_ingredients,
         mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
         mi.admin_review_status, mi.is_customizable,
         s.id as station_id, s.name as station_name
@@ -232,7 +231,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
         FROM menu_items_master mi
         JOIN stations s ON mi.station_id = s.id
         JOIN dining_halls dh ON s.dining_hall_id = dh.id
-        WHERE dh.id = $1 AND mi.is_active = true
+        WHERE dh.id = $1 AND mi.is_active = true AND mi.is_assorted = false
       `;
       if (mealType) {
         query += ` AND (mi.meal_type = $2 OR mi.meal_type = 'all')`;
@@ -266,6 +265,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
         WHERE dh.id = $1
           AND ds.date = $2
           AND mi.is_active = true
+          AND mi.is_assorted = false
       `;
       params.push(selectedDate);
       if (mealType) {
@@ -450,7 +450,6 @@ app.get('/api/admin/menu-items', authenticateToken, adminOnly, async (req, res) 
       SELECT
         mi.id, mi.name, mi.meal_type, mi.admin_review_status, mi.nutrition_source,
         mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
-        mi.scraped_ingredients,
         mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
         COALESCE(mi.override_calories, mi.scraped_calories) as calories,
         COALESCE(mi.override_protein, mi.scraped_protein) as protein,
@@ -492,14 +491,73 @@ app.put('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, r
         override_fat = $4, override_serving_size = $5, admin_review_status = $6,
         nutrition_status = $7, updated_at = CURRENT_TIMESTAMP
        WHERE id = $8 RETURNING *`,
-      [override_calories ?? null, override_protein ?? null, override_carbs ?? null,
-       override_fat ?? null, override_serving_size ?? null, status,
+      [override_calories || null, override_protein || null, override_carbs || null,
+       override_fat || null, override_serving_size || null, status,
        hasOverrides ? 'overridden' : 'accepted', id]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
     res.json(result.rows[0]);
   } catch (error) {
     console.error('Admin update error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ========== ASSORTED ITEM ROUTES ==========
+
+app.put('/api/admin/menu-items/:id/mark-assorted', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_assorted } = req.body;
+    const result = await pool.query(
+      `UPDATE menu_items_master SET is_assorted = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING *`,
+      [!!is_assorted, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Mark assorted error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/admin/menu-items/:id/children', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT * FROM menu_items_master WHERE parent_item_id = $1 ORDER BY name`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Fetch children error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/admin/menu-items/:id/children', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { name, meal_type, calories, protein, carbs, fat, serving_size } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+
+    const parent = await pool.query('SELECT station_id, meal_type FROM menu_items_master WHERE id = $1', [req.params.id]);
+    if (parent.rows.length === 0) return res.status(404).json({ error: 'Parent not found' });
+
+    const result = await pool.query(`
+      INSERT INTO menu_items_master
+        (station_id, parent_item_id, name, meal_type, nutrition_source, nutrition_status,
+         scraped_calories, scraped_protein, scraped_carbs, scraped_fat, scraped_serving_size,
+         is_active, admin_review_status)
+      VALUES ($1, $2, $3, $4, 'manual', 'accepted', $5, $6, $7, $8, $9, true, 'reviewed')
+      RETURNING *
+    `, [
+      parent.rows[0].station_id, req.params.id, name,
+      meal_type || parent.rows[0].meal_type,
+      calories || null, protein || null, carbs || null, fat || null, serving_size || null
+    ]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Add child error:', error);
+    if (error.code === '23505') return res.status(400).json({ error: 'An item with that name already exists in this station.' });
     res.status(500).json({ error: 'Server error' });
   }
 });
