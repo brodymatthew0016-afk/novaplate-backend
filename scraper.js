@@ -6,25 +6,17 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-// Maps DB dining hall names to the query param the Villanova site expects
-const DINING_HALL_NAMES = {
-  'Dougherty Hall': 'DOUGHERTY HALL',
-  'Donahue Hall':   'DONAHUE HALL',
-  "St. Mary's Dining Hall": "ST. MARY'S DINING HALL",
+const DINING_HALL_SLUGS = {
+  'Dougherty Hall': 'dougherty-hall',
+  'Donahue Hall': 'donahue-hall',
+  "St. Mary's Dining Hall": 'st-marys-dining-hall',
 };
 
-const MEAL_TYPES = ['BREAKFAST', 'BRUNCH', 'LUNCH', 'DINNER', 'LATE NIGHT'];
+const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
 
-const PROXY_URL = 'https://webapps.villanova.edu/dininghallmenu/form_confirmation_proxy.jsp?template=no';
-
-// In-memory cache so each unique Nutrislice food id is only fetched once
-// per scraper run, even though the same item appears on many days/meals.
-const ingredientsCache = {};
-
-// Convert YYYY-MM-DD to MM/DD/YYYY for the Villanova API
-function toVillanovaDate(dateStr) {
+function buildUrl(slug, mealType, dateStr) {
   const [year, month, day] = dateStr.split('-');
-  return `${month}/${day}/${year}`;
+  return `https://villanovauniversity.api.nutrislice.com/menu/api/weeks/school/${slug}/menu-type/${mealType}/${year}/${month}/${day}/`;
 }
 
 function addDays(dateStr, days) {
@@ -33,73 +25,36 @@ function addDays(dateStr, days) {
   return d.toISOString().split('T')[0];
 }
 
-async function fetchMenuJson(hallName, mealType, dateStr) {
-  const body = `command=Menu&hall=${encodeURIComponent(hallName)}&date=${encodeURIComponent(toVillanovaDate(dateStr))}&meal=${encodeURIComponent(mealType)}`;
-  const res = await fetch(PROXY_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  });
+async function fetchMenuJson(slug, mealType, dateStr) {
+  const url = buildUrl(slug, mealType, dateStr);
+  const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Villanova request failed: ${res.status} ${res.statusText}`);
+    throw new Error(`Nutrislice request failed: ${res.status} ${res.statusText} (${url})`);
   }
   return res.json();
 }
 
-// Fetches and caches the ingredients list for a single Nutrislice food id.
-// Returns null (not throw) on any failure so one bad lookup never aborts
-// the whole scrape run.
-async function fetchIngredients(villanovaFoodId) {
-  if (!villanovaFoodId) return null;
-
-  if (Object.prototype.hasOwnProperty.call(ingredientsCache, villanovaFoodId)) {
-    return ingredientsCache[villanovaFoodId];
-  }
-
-  let ingredients = null;
-  try {
-    const body = `command=Ingredients&id=${encodeURIComponent(villanovaFoodId)}`;
-    const res = await fetch(PROXY_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body,
-    });
-    if (res.ok) {
-      const json = await res.json();
-      if (Array.isArray(json.ingredients) && json.ingredients.length > 0) {
-        ingredients = json.ingredients.join(', ');
-      }
-    }
-  } catch (err) {
-    console.error(`  Ingredients fetch failed for food id ${villanovaFoodId}:`, err.message);
-  }
-
-  ingredientsCache[villanovaFoodId] = ingredients;
-  return ingredients;
-}
-
-// Stations have no numeric ID in this API — use name as the unique key
-async function upsertStation(client, diningHallId, name) {
+async function upsertStation(client, diningHallId, nutrisliceStationId, name) {
   const result = await client.query(
-    `INSERT INTO stations (dining_hall_id, name)
-     VALUES ($1, $2)
-     ON CONFLICT (dining_hall_id, name)
+    `INSERT INTO stations (dining_hall_id, name, nutrislice_station_id)
+     VALUES ($1, $2, $3)
+     ON CONFLICT (nutrislice_station_id)
      DO UPDATE SET name = EXCLUDED.name
      RETURNING id`,
-    [diningHallId, name]
+    [diningHallId, name, nutrisliceStationId]
   );
   return result.rows[0].id;
 }
 
-async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType, nutrition) {
+async function upsertMenuItem(client, stationId, nutrisliceFoodId, name, mealType, nutrition) {
   const result = await client.query(
     `INSERT INTO menu_items_master
        (station_id, name, meal_type, nutrition_source, nutrition_status,
         scraped_calories, scraped_protein, scraped_carbs, scraped_fat, scraped_serving_size,
-        scraped_ingredients,
         nutrislice_food_id, is_active, admin_review_status)
-     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, $10, true, 'pending')
-      ON CONFLICT (station_id, name)     DO UPDATE SET
+     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, true, 'pending')
+     ON CONFLICT (station_id, nutrislice_food_id)
+     DO UPDATE SET
        name = EXCLUDED.name,
        meal_type = EXCLUDED.meal_type,
        scraped_calories = EXCLUDED.scraped_calories,
@@ -107,7 +62,6 @@ async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType
        scraped_carbs = EXCLUDED.scraped_carbs,
        scraped_fat = EXCLUDED.scraped_fat,
        scraped_serving_size = EXCLUDED.scraped_serving_size,
-       scraped_ingredients = EXCLUDED.scraped_ingredients,
        is_active = true,
        updated_at = CURRENT_TIMESTAMP,
        admin_review_status = CASE
@@ -124,7 +78,7 @@ async function upsertMenuItem(client, stationId, villanovaFoodId, name, mealType
     [
       stationId, name, mealType,
       nutrition.calories, nutrition.protein, nutrition.carbs, nutrition.fat,
-      nutrition.servingSize, nutrition.ingredients, villanovaFoodId
+      nutrition.servingSize, nutrisliceFoodId
     ]
   );
   return result.rows[0].id;
@@ -139,44 +93,84 @@ async function scheduleItem(client, menuItemId, dateStr) {
   );
 }
 
-async function scrapeDiningHallMealType(client, diningHallId, hallName, mealType, dateStr) {
-  const json = await fetchMenuJson(hallName, mealType, dateStr);
+// Map of nutrislice_food_id -> menu_items_master.id for items an admin has
+// flagged as "assorted" (dispenser-style) within this dining hall.
+async function getAssortedFoodIds(client, diningHallId) {
+  const result = await client.query(
+    `SELECT mi.nutrislice_food_id, mi.id
+     FROM menu_items_master mi
+     JOIN stations s ON mi.station_id = s.id
+     WHERE s.dining_hall_id = $1 AND mi.is_assorted = true`,
+    [diningHallId]
+  );
+  const map = new Map();
+  for (const row of result.rows) map.set(row.nutrislice_food_id, row.id);
+  return map;
+}
 
-  const menuItems = json.menu || [];
-  if (menuItems.length === 0) return { stations: 0, items: 0 };
+// Active child items (e.g. individual cereals) belonging to an assorted parent item
+async function getActiveChildren(client, parentId) {
+  const result = await client.query(
+    `SELECT id FROM menu_items_master WHERE parent_item_id = $1 AND is_active = true`,
+    [parentId]
+  );
+  return result.rows;
+}
 
-  // Cache station IDs within this call to avoid redundant DB hits
-  const stationCache = {};
+async function scrapeDiningHallMealType(client, diningHallId, slug, mealType, dateStr) {
+  const json = await fetchMenuJson(slug, mealType, dateStr);
+
+  const dayEntry = json.days.find(d => d.date === dateStr);
+  if (!dayEntry) {
+    return { stations: 0, items: 0 };
+  }
+
+  const assortedFoodIds = await getAssortedFoodIds(client, diningHallId);
+
+  const menuItems = dayEntry.menu_items || [];
+  let currentStationId = null;
+  let stationCount = 0;
   let itemCount = 0;
 
-  for (const item of menuItems) {
-    const courseName = item.course || 'General';
-
-    if (!stationCache[courseName]) {
-      stationCache[courseName] = await upsertStation(client, diningHallId, courseName);
+  for (const entry of menuItems) {
+    if (entry.is_station_header) {
+      currentStationId = await upsertStation(client, diningHallId, entry.station_id, entry.text);
+      stationCount++;
+      continue;
     }
-    const stationId = stationCache[courseName];
 
-    // Normalize meal type to lowercase to match DB constraint
-    const dbMealType = mealType === 'LATE NIGHT' ? 'dinner'
-      : mealType === 'BRUNCH' ? 'breakfast'
-      : mealType.toLowerCase();
+    if (!entry.food || currentStationId === null) continue;
 
-    const ingredients = await fetchIngredients(item.id);
+    const food = entry.food;
+
+    // Assorted (dispenser) items: don't overwrite admin-managed macros, and
+    // don't schedule the parent placeholder itself — schedule its children.
+    if (assortedFoodIds.has(food.id)) {
+      const parentId = assortedFoodIds.get(food.id);
+      const children = await getActiveChildren(client, parentId);
+      for (const child of children) {
+        await scheduleItem(client, child.id, dateStr);
+      }
+      itemCount += children.length;
+      continue;
+    }
+
+    const nutrition = food.rounded_nutrition_info || {};
 
     const itemId = await upsertMenuItem(
       client,
-      stationId,
-      item.id,
-      item.itemName,
-      dbMealType,
+      currentStationId,
+      food.id,
+      food.name,
+      mealType,
       {
-        calories:    item.calories    != null ? Math.round(item.calories)    : null,
-        protein:     item.protein     != null ? Math.round(item.protein)     : null,
-        carbs:       item.carbohydrate != null ? Math.round(item.carbohydrate) : null,
-        fat:         item.fat         != null ? Math.round(item.fat)         : null,
-        servingSize: item.portion     || null,
-        ingredients: ingredients,
+        calories: nutrition.calories != null ? Math.round(nutrition.calories) : null,
+        protein: nutrition.g_protein != null ? Math.round(nutrition.g_protein) : null,
+        carbs: nutrition.g_carbs != null ? Math.round(nutrition.g_carbs) : null,
+        fat: nutrition.g_fat != null ? Math.round(nutrition.g_fat) : null,
+        servingSize: food.serving_size_info
+          ? `${food.serving_size_info.serving_size_amount} ${food.serving_size_info.serving_size_unit}`
+          : null,
       }
     );
 
@@ -184,25 +178,26 @@ async function scrapeDiningHallMealType(client, diningHallId, hallName, mealType
     itemCount++;
   }
 
-  const stationCount = Object.keys(stationCache).length;
-  console.log(`  ${hallName}/${mealType}: ${stationCount} stations, ${itemCount} items for ${dateStr}`);
+  console.log(`  ${slug}/${mealType}: ${stationCount} stations, ${itemCount} items for ${dateStr}`);
   return { stations: stationCount, items: itemCount };
 }
 
-async function scrapeDateForHall(client, hall, hallName, dateStr) {
+// Scrape a single date across all meal types for a hall
+async function scrapeDateForHall(client, hall, slug, dateStr) {
   let totalItems = 0;
   for (const mealType of MEAL_TYPES) {
     try {
-      const result = await scrapeDiningHallMealType(client, hall.id, hallName, mealType, dateStr);
+      const result = await scrapeDiningHallMealType(client, hall.id, slug, mealType, dateStr);
       totalItems += result.items;
     } catch (err) {
-      console.error(`  Error scraping ${hallName}/${mealType} for ${dateStr}:`, err.message);
+      console.error(`  Error scraping ${slug}/${mealType} for ${dateStr}:`, err.message);
     }
   }
   return totalItems;
 }
 
-async function scrapeForward(client, hall, hallName) {
+// Scrape forward from today until Nutrislice stops returning data
+async function scrapeForward(client, hall, slug) {
   let dateStr = new Date().toISOString().split('T')[0];
   let consecutiveEmptyDays = 0;
   const MAX_EMPTY = 3;
@@ -210,7 +205,7 @@ async function scrapeForward(client, hall, hallName) {
   console.log(`  Scraping forward from ${dateStr}...`);
 
   while (consecutiveEmptyDays < MAX_EMPTY) {
-    const items = await scrapeDateForHall(client, hall, hallName, dateStr);
+    const items = await scrapeDateForHall(client, hall, slug, dateStr);
     if (items === 0) {
       consecutiveEmptyDays++;
       console.log(`  No items for ${dateStr} (${consecutiveEmptyDays}/${MAX_EMPTY} empty)`);
@@ -224,6 +219,8 @@ async function scrapeForward(client, hall, hallName) {
 }
 
 async function main() {
+  // If a date argument is passed, scrape just that date (original behavior)
+  // If no argument, scrape forward from today until empty
   const specificDate = process.argv[2];
 
   const client = await pool.connect();
@@ -231,18 +228,18 @@ async function main() {
     const hallsResult = await client.query('SELECT id, name FROM dining_halls');
 
     for (const hall of hallsResult.rows) {
-      const hallName = DINING_HALL_NAMES[hall.name];
-      if (!hallName) {
-        console.log(`Skipping ${hall.name}: no Villanova name configured`);
+      const slug = DINING_HALL_SLUGS[hall.name];
+      if (!slug) {
+        console.log(`Skipping ${hall.name}: no Nutrislice slug configured`);
         continue;
       }
 
-      console.log(`\n${hall.name} (${hallName}):`);
+      console.log(`\n${hall.name} (${slug}):`);
 
       if (specificDate) {
-        await scrapeDateForHall(client, hall, hallName, specificDate);
+        await scrapeDateForHall(client, hall, slug, specificDate);
       } else {
-        await scrapeForward(client, hall, hallName);
+        await scrapeForward(client, hall, slug);
       }
     }
   } finally {

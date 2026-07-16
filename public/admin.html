@@ -1227,6 +1227,24 @@
       ? `<div class="ingredients-hint"><strong>Ingredients (scraped, read-only):</strong> ${escHtml(item.scraped_ingredients)}</div>`
       : `<div class="ingredients-hint"><strong>Ingredients:</strong> not available from scraper</div>`;
 
+    const assortedChecked = item.is_assorted ? 'checked' : '';
+
+    const assortedPanel = item.is_assorted ? `
+      <div class="assorted-panel" id="assorted-panel-${item.id}" style="margin-top:12px; padding:12px; background:#fff; border:1px solid #dbe4ff; border-radius:8px;">
+        <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Dispensed Items</div>
+        <div id="children-list-${item.id}">Loading...</div>
+        <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+          <input type="text" id="child-name-${item.id}" placeholder="Name" style="width:140px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <input type="number" id="child-cal-${item.id}" placeholder="Cal" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <input type="number" id="child-pro-${item.id}" placeholder="Pro" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <input type="number" id="child-carb-${item.id}" placeholder="Carb" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <input type="number" id="child-fat-${item.id}" placeholder="Fat" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <input type="text" id="child-serving-${item.id}" placeholder="Serving" style="width:90px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
+          <button class="btn-add-station" onclick="addChildItem(${item.id})">+ Add</button>
+        </div>
+      </div>
+    ` : '';
+
     return `
       <div class="edit-form">
         <div class="field">
@@ -1258,7 +1276,13 @@
             <option value="needs_count" ${item.admin_review_status === 'needs_count' ? 'selected' : ''}>Needs Count</option>
           </select>
         </div>
+        <div class="field">
+          <label>Assorted</label>
+          <input type="checkbox" id="edit-assorted-${item.id}" ${assortedChecked}
+            onchange="toggleAssorted(${item.id}, this.checked)" style="width:auto; margin-top:8px;" />
+        </div>
       </div>
+      ${assortedPanel}
       <div class="scraped-hint">
         Scraped values: cal ${item.scraped_calories ?? 'null'} · pro ${item.scraped_protein ?? 'null'}g · carb ${item.scraped_carbs ?? 'null'}g · fat ${item.scraped_fat ?? 'null'}g · serving ${item.scraped_serving_size ?? 'null'}
       </div>
@@ -1280,6 +1304,66 @@
     const isOpen = editRow.style.display !== 'none';
     editRow.style.display = isOpen ? 'none' : 'table-row';
     editingId = isOpen ? null : id;
+
+    if (!isOpen) {
+      const item = allItems.find(i => i.id === id);
+      if (item && item.is_assorted) loadChildren(id);
+    }
+  }
+
+  // ---- ASSORTED ITEMS ----
+  async function toggleAssorted(id, checked) {
+    const res = await apiFetch(`/api/admin/menu-items/${id}/mark-assorted`, {
+      method: 'PUT',
+      body: JSON.stringify({ is_assorted: checked })
+    });
+    if (!res || !res.ok) { alert('Failed to update.'); return; }
+    const idx = allItems.findIndex(i => i.id === id);
+    if (idx !== -1) allItems[idx].is_assorted = checked;
+    // Re-render the edit row so the Dispensed Items panel appears/disappears
+    toggleEdit(id); toggleEdit(id);
+  }
+
+  async function loadChildren(id) {
+    const res = await apiFetch(`/api/admin/menu-items/${id}/children`);
+    if (!res) return;
+    const children = await res.json();
+    const list = document.getElementById(`children-list-${id}`);
+    if (!list) return;
+    list.innerHTML = children.length === 0
+      ? '<span style="color:#aaa; font-size:13px;">No items added yet.</span>'
+      : children.map(c => `
+          <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
+            <span>${escHtml(c.name)} — ${c.scraped_calories ?? '—'} cal</span>
+            <button class="delete-btn" onclick="deleteChild(${c.id}, ${id})">Delete</button>
+          </div>
+        `).join('');
+  }
+
+  async function addChildItem(parentId) {
+    const name = document.getElementById(`child-name-${parentId}`).value.trim();
+    if (!name) return alert('Name required.');
+    const body = {
+      name,
+      calories: document.getElementById(`child-cal-${parentId}`).value || null,
+      protein: document.getElementById(`child-pro-${parentId}`).value || null,
+      carbs: document.getElementById(`child-carb-${parentId}`).value || null,
+      fat: document.getElementById(`child-fat-${parentId}`).value || null,
+      serving_size: document.getElementById(`child-serving-${parentId}`).value || null,
+    };
+    const res = await apiFetch(`/api/admin/menu-items/${parentId}/children`, {
+      method: 'POST', body: JSON.stringify(body)
+    });
+    if (!res || !res.ok) { alert('Failed to add.'); return; }
+    ['name','cal','pro','carb','fat','serving'].forEach(f => document.getElementById(`child-${f}-${parentId}`).value = '');
+    await loadChildren(parentId);
+  }
+
+  async function deleteChild(childId, parentId) {
+    if (!confirm('Delete this dispensed item?')) return;
+    const res = await apiFetch(`/api/admin/menu-items/${childId}`, { method: 'DELETE' });
+    if (!res || !res.ok) { alert('Delete failed.'); return; }
+    await loadChildren(parentId);
   }
 
   async function quickReview(id) {
