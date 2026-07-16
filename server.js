@@ -503,6 +503,18 @@ app.put('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, r
   }
 });
 
+app.delete('/api/admin/menu-items/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM menu_items_master WHERE id = $1 RETURNING *', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json({ message: 'Deleted', item: result.rows[0] });
+  } catch (error) {
+    console.error('Menu item delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== ASSORTED ITEM ROUTES ==========
 
 app.put('/api/admin/menu-items/:id/mark-assorted', authenticateToken, adminOnly, async (req, res) => {
