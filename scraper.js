@@ -6,17 +6,41 @@ const pool = new Pool({
   ssl: { rejectUnauthorized: false }
 });
 
-const DINING_HALL_SLUGS = {
-  'Dougherty Hall': 'dougherty-hall',
-  'Donahue Hall': 'donahue-hall',
-  "St. Mary's Dining Hall": 'st-marys-dining-hall',
+// Maps dining_halls.name (as stored in the DB) -> the exact `hall` query
+// param this proxy expects.
+//
+// CONFIRMED via browser network tab: 'Dougherty Hall' -> 'DOUGHERTY HALL'
+// UNVERIFIED (best guess, please confirm): Donahue Hall, St. Mary's Dining Hall
+//   -> If either comes back with an empty `menu` array on days you know have
+//      food, open DevTools on villanova.edu's dining page, switch to that
+//      hall, and grab the real `hall=` value from the Network tab.
+const DINING_HALL_PARAMS = {
+  'Dougherty Hall': 'DOUGHERTY HALL',
+  'Donahue Hall': 'DONAHUE HALL',
+  "St. Mary's Dining Hall": "ST. MARY'S HALL",
 };
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
 
-function buildUrl(slug, mealType, dateStr) {
+// UNVERIFIED (best guess): confirmed only for 'dinner' -> 'Dinner' so far.
+const MEAL_PARAM = {
+  breakfast: 'Breakfast',
+  lunch: 'Lunch',
+  dinner: 'Dinner',
+};
+
+const BASE_URL = 'https://www.villanova.edu/etc/designs/villanova/ajax/dininghallmenu.proxy.json';
+
+function buildUrl(hallParam, mealType, dateStr) {
+  // dateStr is 'YYYY-MM-DD' -> proxy wants 'MM/DD/YYYY'
   const [year, month, day] = dateStr.split('-');
-  return `https://villanovauniversity.api.nutrislice.com/menu/api/weeks/school/${slug}/menu-type/${mealType}/${year}/${month}/${day}/`;
+  const params = new URLSearchParams({
+    command: 'Menu',
+    hall: hallParam,
+    meal: MEAL_PARAM[mealType],
+    date: `${month}/${day}/${year}`,
+  });
+  return `${BASE_URL}?${params.toString()}`;
 }
 
 function addDays(dateStr, days) {
@@ -25,28 +49,32 @@ function addDays(dateStr, days) {
   return d.toISOString().split('T')[0];
 }
 
-async function fetchMenuJson(slug, mealType, dateStr) {
-  const url = buildUrl(slug, mealType, dateStr);
+async function fetchMenuItems(hallParam, mealType, dateStr) {
+  const url = buildUrl(hallParam, mealType, dateStr);
   const res = await fetch(url);
   if (!res.ok) {
-    throw new Error(`Nutrislice request failed: ${res.status} ${res.statusText} (${url})`);
+    throw new Error(`Villanova dining proxy failed: ${res.status} ${res.statusText} (${url})`);
   }
-  return res.json();
+  const json = await res.json();
+  return Array.isArray(json.menu) ? json.menu : [];
 }
 
-async function upsertStation(client, diningHallId, nutrisliceStationId, name) {
+async function upsertStation(client, diningHallId, name) {
+  // This API doesn't hand back a stable numeric station id like Nutrislice
+  // did, so we key stations on (dining_hall_id, name) instead, which is
+  // already a unique constraint on the table.
   const result = await client.query(
-    `INSERT INTO stations (dining_hall_id, name, nutrislice_station_id)
-     VALUES ($1, $2, $3)
-     ON CONFLICT (nutrislice_station_id)
+    `INSERT INTO stations (dining_hall_id, name)
+     VALUES ($1, $2)
+     ON CONFLICT (dining_hall_id, name)
      DO UPDATE SET name = EXCLUDED.name
      RETURNING id`,
-    [diningHallId, name, nutrisliceStationId]
+    [diningHallId, name]
   );
   return result.rows[0].id;
 }
 
-async function upsertMenuItem(client, stationId, nutrisliceFoodId, name, mealType, nutrition) {
+async function upsertMenuItem(client, stationId, foodId, name, mealType, nutrition) {
   const result = await client.query(
     `INSERT INTO menu_items_master
        (station_id, name, meal_type, nutrition_source, nutrition_status,
@@ -78,7 +106,7 @@ async function upsertMenuItem(client, stationId, nutrisliceFoodId, name, mealTyp
     [
       stationId, name, mealType,
       nutrition.calories, nutrition.protein, nutrition.carbs, nutrition.fat,
-      nutrition.servingSize, nutrisliceFoodId
+      nutrition.servingSize, foodId
     ]
   );
   return result.rows[0].id;
@@ -117,36 +145,27 @@ async function getActiveChildren(client, parentId) {
   return result.rows;
 }
 
-async function scrapeDiningHallMealType(client, diningHallId, slug, mealType, dateStr) {
-  const json = await fetchMenuJson(slug, mealType, dateStr);
-
-  const dayEntry = json.days.find(d => d.date === dateStr);
-  if (!dayEntry) {
-    return { stations: 0, items: 0 };
-  }
+async function scrapeDiningHallMealType(client, diningHallId, hallParam, mealType, dateStr) {
+  const items = await fetchMenuItems(hallParam, mealType, dateStr);
 
   const assortedFoodIds = await getAssortedFoodIds(client, diningHallId);
-
-  const menuItems = dayEntry.menu_items || [];
-  let currentStationId = null;
-  let stationCount = 0;
+  const stationCache = new Map();
   let itemCount = 0;
 
-  for (const entry of menuItems) {
-    if (entry.is_station_header) {
-      currentStationId = await upsertStation(client, diningHallId, entry.station_id, entry.text);
-      stationCount++;
-      continue;
+  for (const item of items) {
+    const stationName = item.course || 'Unassigned';
+    let stationId = stationCache.get(stationName);
+    if (!stationId) {
+      stationId = await upsertStation(client, diningHallId, stationName);
+      stationCache.set(stationName, stationId);
     }
 
-    if (!entry.food || currentStationId === null) continue;
-
-    const food = entry.food;
+    const foodId = item.id;
 
     // Assorted (dispenser) items: don't overwrite admin-managed macros, and
     // don't schedule the parent placeholder itself — schedule its children.
-    if (assortedFoodIds.has(Number(food.id))) {
-      const parentId = assortedFoodIds.get(Number(food.id));
+    if (assortedFoodIds.has(Number(foodId))) {
+      const parentId = assortedFoodIds.get(Number(foodId));
       const children = await getActiveChildren(client, parentId);
       for (const child of children) {
         await scheduleItem(client, child.id, dateStr);
@@ -155,49 +174,45 @@ async function scrapeDiningHallMealType(client, diningHallId, slug, mealType, da
       continue;
     }
 
-    const nutrition = food.rounded_nutrition_info || {};
-
-    const itemId = await upsertMenuItem(
+    const menuItemId = await upsertMenuItem(
       client,
-      currentStationId,
-      food.id,
-      food.name,
+      stationId,
+      foodId,
+      item.itemName,
       mealType,
       {
-        calories: nutrition.calories != null ? Math.round(nutrition.calories) : null,
-        protein: nutrition.g_protein != null ? Math.round(nutrition.g_protein) : null,
-        carbs: nutrition.g_carbs != null ? Math.round(nutrition.g_carbs) : null,
-        fat: nutrition.g_fat != null ? Math.round(nutrition.g_fat) : null,
-        servingSize: food.serving_size_info
-          ? `${food.serving_size_info.serving_size_amount} ${food.serving_size_info.serving_size_unit}`
-          : null,
+        calories: item.calories != null ? Math.round(item.calories) : null,
+        protein: item.protein != null ? Math.round(item.protein) : null,
+        carbs: item.carbohydrate != null ? Math.round(item.carbohydrate) : null,
+        fat: item.fat != null ? Math.round(item.fat) : null,
+        servingSize: item.portion || null,
       }
     );
 
-    await scheduleItem(client, itemId, dateStr);
+    await scheduleItem(client, menuItemId, dateStr);
     itemCount++;
   }
 
-  console.log(`  ${slug}/${mealType}: ${stationCount} stations, ${itemCount} items for ${dateStr}`);
-  return { stations: stationCount, items: itemCount };
+  console.log(`  ${hallParam}/${mealType}: ${stationCache.size} stations, ${itemCount} items for ${dateStr}`);
+  return { stations: stationCache.size, items: itemCount };
 }
 
 // Scrape a single date across all meal types for a hall
-async function scrapeDateForHall(client, hall, slug, dateStr) {
+async function scrapeDateForHall(client, hall, hallParam, dateStr) {
   let totalItems = 0;
   for (const mealType of MEAL_TYPES) {
     try {
-      const result = await scrapeDiningHallMealType(client, hall.id, slug, mealType, dateStr);
+      const result = await scrapeDiningHallMealType(client, hall.id, hallParam, mealType, dateStr);
       totalItems += result.items;
     } catch (err) {
-      console.error(`  Error scraping ${slug}/${mealType} for ${dateStr}:`, err.message);
+      console.error(`  Error scraping ${hallParam}/${mealType} for ${dateStr}:`, err.message);
     }
   }
   return totalItems;
 }
 
-// Scrape forward from today until Nutrislice stops returning data
-async function scrapeForward(client, hall, slug) {
+// Scrape forward from today until this proxy stops returning data
+async function scrapeForward(client, hall, hallParam) {
   let dateStr = new Date().toISOString().split('T')[0];
   let consecutiveEmptyDays = 0;
   const MAX_EMPTY = 3;
@@ -205,7 +220,7 @@ async function scrapeForward(client, hall, slug) {
   console.log(`  Scraping forward from ${dateStr}...`);
 
   while (consecutiveEmptyDays < MAX_EMPTY) {
-    const items = await scrapeDateForHall(client, hall, slug, dateStr);
+    const items = await scrapeDateForHall(client, hall, hallParam, dateStr);
     if (items === 0) {
       consecutiveEmptyDays++;
       console.log(`  No items for ${dateStr} (${consecutiveEmptyDays}/${MAX_EMPTY} empty)`);
@@ -228,18 +243,18 @@ async function main() {
     const hallsResult = await client.query('SELECT id, name FROM dining_halls');
 
     for (const hall of hallsResult.rows) {
-      const slug = DINING_HALL_SLUGS[hall.name];
-      if (!slug) {
-        console.log(`Skipping ${hall.name}: no Nutrislice slug configured`);
+      const hallParam = DINING_HALL_PARAMS[hall.name];
+      if (!hallParam) {
+        console.log(`Skipping ${hall.name}: no dining hall param configured`);
         continue;
       }
 
-      console.log(`\n${hall.name} (${slug}):`);
+      console.log(`\n${hall.name} (${hallParam}):`);
 
       if (specificDate) {
-        await scrapeDateForHall(client, hall, slug, specificDate);
+        await scrapeDateForHall(client, hall, hallParam, specificDate);
       } else {
-        await scrapeForward(client, hall, slug);
+        await scrapeForward(client, hall, hallParam);
       }
     }
   } finally {
