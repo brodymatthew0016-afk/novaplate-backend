@@ -104,7 +104,7 @@ async function getAssortedFoodIds(client, diningHallId) {
     [diningHallId]
   );
   const map = new Map();
-  for (const row of result.rows) map.set(row.nutrislice_food_id, row.id);
+  for (const row of result.rows) map.set(Number(row.nutrislice_food_id), row.id);
   return map;
 }
 
@@ -145,8 +145,8 @@ async function scrapeDiningHallMealType(client, diningHallId, slug, mealType, da
 
     // Assorted (dispenser) items: don't overwrite admin-managed macros, and
     // don't schedule the parent placeholder itself — schedule its children.
-    if (assortedFoodIds.has(food.id)) {
-      const parentId = assortedFoodIds.get(food.id);
+    if (assortedFoodIds.has(Number(food.id))) {
+      const parentId = assortedFoodIds.get(Number(food.id));
       const children = await getActiveChildren(client, parentId);
       for (const child of children) {
         await scheduleItem(client, child.id, dateStr);
