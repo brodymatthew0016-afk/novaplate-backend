@@ -1320,8 +1320,13 @@
     if (!res || !res.ok) { alert('Failed to update.'); return; }
     const idx = allItems.findIndex(i => i.id === id);
     if (idx !== -1) allItems[idx].is_assorted = checked;
-    // Re-render the edit row so the Dispensed Items panel appears/disappears
-    toggleEdit(id); toggleEdit(id);
+
+    // Actually rebuild the edit form's HTML in place so the Dispensed Items panel appears/disappears
+    const editRow = document.getElementById(`edit-row-${id}`);
+    if (editRow) {
+      editRow.querySelector('td').innerHTML = renderEditForm(allItems[idx]);
+    }
+    if (checked) loadChildren(id);
   }
 
   async function loadChildren(id) {
