@@ -43,6 +43,17 @@ function buildUrl(hallParam, mealType, dateStr) {
   return `${BASE_URL}?${params.toString()}`;
 }
 
+// CONFIRMED via browser network tab:
+//   GET dininghallmenu.proxy.json?command=Ingredients&id=<itemId>
+//   -> { "ingredients": ["Shredded Mozzarella & Provolone Cheese", "Peeled Ground Tomatoes", "12\" Flatbread"] }
+function buildIngredientsUrl(itemId) {
+  const params = new URLSearchParams({
+    command: 'Ingredients',
+    id: itemId,
+  });
+  return `${BASE_URL}?${params.toString()}`;
+}
+
 function addDays(dateStr, days) {
   const d = new Date(dateStr);
   d.setDate(d.getDate() + days);
@@ -57,6 +68,53 @@ async function fetchMenuItems(hallParam, mealType, dateStr) {
   }
   const json = await res.json();
   return Array.isArray(json.menu) ? json.menu : [];
+}
+
+// In-memory cache so we only ever fetch a given item's ingredients once per
+// scrape run, no matter how many hall/meal/date combos it shows up in.
+const ingredientsCache = new Map();
+
+// Set of nutrislice_food_ids that already have scraped_ingredients in the DB.
+// Populated once at the start of a run so we don't waste a request re-fetching
+// ingredients for items we've already captured (ingredient lists don't change
+// day to day the way nutrition/serving info sometimes does).
+let idsWithIngredients = new Set();
+
+async function loadIdsWithIngredients(client) {
+  const result = await client.query(
+    `SELECT nutrislice_food_id FROM menu_items_master
+     WHERE scraped_ingredients IS NOT NULL AND nutrislice_food_id IS NOT NULL`
+  );
+  idsWithIngredients = new Set(result.rows.map(r => Number(r.nutrislice_food_id)));
+  console.log(`Loaded ${idsWithIngredients.size} items that already have ingredients on file.`);
+}
+
+async function fetchItemIngredients(itemId) {
+  const key = Number(itemId);
+
+  if (ingredientsCache.has(key)) return ingredientsCache.get(key);
+
+  // Already in the DB from a previous run -> skip the network call entirely.
+  if (idsWithIngredients.has(key)) {
+    ingredientsCache.set(key, undefined); // undefined = "don't touch existing value"
+    return undefined;
+  }
+
+  const url = buildIngredientsUrl(itemId);
+  try {
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    const json = await res.json();
+    const list = Array.isArray(json.ingredients) ? json.ingredients : null;
+    const ingredients = list && list.length ? list.join(', ') : null;
+    ingredientsCache.set(key, ingredients);
+    if (ingredients) idsWithIngredients.add(key);
+    return ingredients;
+  } catch (err) {
+    console.error(`  Ingredients fetch failed for item ${itemId}:`, err.message);
+    ingredientsCache.set(key, null);
+    return null;
+  }
 }
 
 async function upsertStation(client, diningHallId, name) {
@@ -74,13 +132,13 @@ async function upsertStation(client, diningHallId, name) {
   return result.rows[0].id;
 }
 
-async function upsertMenuItem(client, stationId, foodId, name, mealType, nutrition) {
+async function upsertMenuItem(client, stationId, foodId, name, mealType, nutrition, ingredients) {
   const result = await client.query(
     `INSERT INTO menu_items_master
        (station_id, name, meal_type, nutrition_source, nutrition_status,
         scraped_calories, scraped_protein, scraped_carbs, scraped_fat, scraped_serving_size,
-        nutrislice_food_id, is_active, admin_review_status)
-     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, true, 'pending')
+        scraped_ingredients, nutrislice_food_id, is_active, admin_review_status)
+     VALUES ($1, $2, $3, 'scraped', 'accepted', $4, $5, $6, $7, $8, $9, $10, true, 'pending')
      ON CONFLICT (station_id, nutrislice_food_id)
      DO UPDATE SET
        name = EXCLUDED.name,
@@ -90,6 +148,7 @@ async function upsertMenuItem(client, stationId, foodId, name, mealType, nutriti
        scraped_carbs = EXCLUDED.scraped_carbs,
        scraped_fat = EXCLUDED.scraped_fat,
        scraped_serving_size = EXCLUDED.scraped_serving_size,
+       scraped_ingredients = COALESCE(EXCLUDED.scraped_ingredients, menu_items_master.scraped_ingredients),
        is_active = true,
        updated_at = CURRENT_TIMESTAMP,
        admin_review_status = CASE
@@ -106,19 +165,10 @@ async function upsertMenuItem(client, stationId, foodId, name, mealType, nutriti
     [
       stationId, name, mealType,
       nutrition.calories, nutrition.protein, nutrition.carbs, nutrition.fat,
-      nutrition.servingSize, foodId
+      nutrition.servingSize, ingredients ?? null, foodId
     ]
   );
   return result.rows[0].id;
-}
-
-async function scheduleItem(client, menuItemId, dateStr) {
-  await client.query(
-    `INSERT INTO daily_schedule (menu_item_id, date)
-     VALUES ($1, $2)
-     ON CONFLICT (menu_item_id, date) DO NOTHING`,
-    [menuItemId, dateStr]
-  );
 }
 
 // Map of nutrislice_food_id -> menu_items_master.id for items an admin has
@@ -174,6 +224,11 @@ async function scrapeDiningHallMealType(client, diningHallId, hallParam, mealTyp
       continue;
     }
 
+    // undefined => leave existing scraped_ingredients alone (already on file)
+    // null      => fetch attempted but failed / came back empty
+    // string    => fresh ingredients text to store
+    const ingredients = await fetchItemIngredients(foodId);
+
     const menuItemId = await upsertMenuItem(
       client,
       stationId,
@@ -186,7 +241,8 @@ async function scrapeDiningHallMealType(client, diningHallId, hallParam, mealTyp
         carbs: item.carbohydrate != null ? Math.round(item.carbohydrate) : null,
         fat: item.fat != null ? Math.round(item.fat) : null,
         servingSize: item.portion || null,
-      }
+      },
+      ingredients
     );
 
     await scheduleItem(client, menuItemId, dateStr);
@@ -195,6 +251,15 @@ async function scrapeDiningHallMealType(client, diningHallId, hallParam, mealTyp
 
   console.log(`  ${hallParam}/${mealType}: ${stationCache.size} stations, ${itemCount} items for ${dateStr}`);
   return { stations: stationCache.size, items: itemCount };
+}
+
+async function scheduleItem(client, menuItemId, dateStr) {
+  await client.query(
+    `INSERT INTO daily_schedule (menu_item_id, date)
+     VALUES ($1, $2)
+     ON CONFLICT (menu_item_id, date) DO NOTHING`,
+    [menuItemId, dateStr]
+  );
 }
 
 // Scrape a single date across all meal types for a hall
@@ -240,6 +305,8 @@ async function main() {
 
   const client = await pool.connect();
   try {
+    await loadIdsWithIngredients(client);
+
     const hallsResult = await client.query('SELECT id, name FROM dining_halls');
 
     for (const hall of hallsResult.rows) {
@@ -257,6 +324,10 @@ async function main() {
         await scrapeForward(client, hall, hallParam);
       }
     }
+
+    console.log(`\nIngredients fetched this run: ${
+      [...ingredientsCache.values()].filter(v => typeof v === 'string').length
+    } new item(s).`);
   } finally {
     client.release();
     await pool.end();
