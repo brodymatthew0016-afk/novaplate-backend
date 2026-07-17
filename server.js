@@ -238,38 +238,60 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
         params.push(mealType);
       }
     } else {
-      // Variable halls: join daily_schedule as before
+      // Variable halls: join daily_schedule, and swap assorted items for their children
       query = `
         SELECT
-          mi.id,
-          mi.name,
-          mi.meal_type,
-          mi.is_customizable,
-          mi.is_active,
+          CASE WHEN mi.is_assorted THEN child.id ELSE mi.id END as id,
+          CASE WHEN mi.is_assorted THEN child.name ELSE mi.name END as name,
+          CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END as meal_type,
+          CASE WHEN mi.is_assorted THEN child.is_customizable ELSE mi.is_customizable END as is_customizable,
+          CASE WHEN mi.is_assorted THEN child.is_active ELSE mi.is_active END as is_active,
           s.id as station_id,
           s.name as station_name,
           dh.id as dining_hall_id,
           dh.name as dining_hall_name,
-          COALESCE(mi.override_calories, mi.scraped_calories) as calories,
-          COALESCE(mi.override_protein, mi.scraped_protein) as protein,
-          COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
-          COALESCE(mi.override_fat, mi.scraped_fat) as fat,
-          COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
-          mi.nutrition_source,
-          mi.nutrition_status,
-          EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
+          CASE WHEN mi.is_assorted
+            THEN COALESCE(child.override_calories, child.scraped_calories)
+            ELSE COALESCE(mi.override_calories, mi.scraped_calories)
+          END as calories,
+          CASE WHEN mi.is_assorted
+            THEN COALESCE(child.override_protein, child.scraped_protein)
+            ELSE COALESCE(mi.override_protein, mi.scraped_protein)
+          END as protein,
+          CASE WHEN mi.is_assorted
+            THEN COALESCE(child.override_carbs, child.scraped_carbs)
+            ELSE COALESCE(mi.override_carbs, mi.scraped_carbs)
+          END as carbs,
+          CASE WHEN mi.is_assorted
+            THEN COALESCE(child.override_fat, child.scraped_fat)
+            ELSE COALESCE(mi.override_fat, mi.scraped_fat)
+          END as fat,
+          CASE WHEN mi.is_assorted
+            THEN COALESCE(child.override_serving_size, child.scraped_serving_size)
+            ELSE COALESCE(mi.override_serving_size, mi.scraped_serving_size)
+          END as serving_size,
+          CASE WHEN mi.is_assorted THEN child.nutrition_source ELSE mi.nutrition_source END as nutrition_source,
+          CASE WHEN mi.is_assorted THEN child.nutrition_status ELSE mi.nutrition_status END as nutrition_status,
+          CASE WHEN mi.is_assorted
+            THEN EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = child.id)
+            ELSE EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id)
+          END as has_options
         FROM menu_items_master mi
         JOIN stations s ON mi.station_id = s.id
         JOIN dining_halls dh ON s.dining_hall_id = dh.id
         JOIN daily_schedule ds ON ds.menu_item_id = mi.id
+        LEFT JOIN menu_items_master child ON child.parent_item_id = mi.id AND child.is_active = true
         WHERE dh.id = $1
           AND ds.date = $2
           AND mi.is_active = true
-          AND mi.is_assorted = false
+          AND (mi.is_assorted = false OR child.id IS NOT NULL)
       `;
       params.push(selectedDate);
       if (mealType) {
-        query += ` AND (mi.meal_type = $3 OR mi.meal_type = 'all')`;
+        query += ` AND (
+          CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END = $3
+          OR CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END = 'all'
+        )`;
         params.push(mealType);
       }
     }
