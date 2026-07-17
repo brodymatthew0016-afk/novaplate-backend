@@ -472,7 +472,7 @@ app.get('/api/admin/menu-items', authenticateToken, adminOnly, async (req, res) 
     let query = `
       SELECT
         mi.id, mi.name, mi.meal_type, mi.admin_review_status, mi.nutrition_source,
-        mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
+        mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size, mi.scraped_ingredients,
         mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
         COALESCE(mi.override_calories, mi.scraped_calories) as calories,
         COALESCE(mi.override_protein, mi.scraped_protein) as protein,
