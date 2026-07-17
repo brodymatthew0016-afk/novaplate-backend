@@ -238,60 +238,38 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
         params.push(mealType);
       }
     } else {
-      // Variable halls: join daily_schedule, and swap assorted items for their children
+      // Variable halls: join daily_schedule as before
       query = `
         SELECT
-          CASE WHEN mi.is_assorted THEN child.id ELSE mi.id END as id,
-          CASE WHEN mi.is_assorted THEN child.name ELSE mi.name END as name,
-          CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END as meal_type,
-          CASE WHEN mi.is_assorted THEN child.is_customizable ELSE mi.is_customizable END as is_customizable,
-          CASE WHEN mi.is_assorted THEN child.is_active ELSE mi.is_active END as is_active,
+          mi.id,
+          mi.name,
+          mi.meal_type,
+          mi.is_customizable,
+          mi.is_active,
           s.id as station_id,
           s.name as station_name,
           dh.id as dining_hall_id,
           dh.name as dining_hall_name,
-          CASE WHEN mi.is_assorted
-            THEN COALESCE(child.override_calories, child.scraped_calories)
-            ELSE COALESCE(mi.override_calories, mi.scraped_calories)
-          END as calories,
-          CASE WHEN mi.is_assorted
-            THEN COALESCE(child.override_protein, child.scraped_protein)
-            ELSE COALESCE(mi.override_protein, mi.scraped_protein)
-          END as protein,
-          CASE WHEN mi.is_assorted
-            THEN COALESCE(child.override_carbs, child.scraped_carbs)
-            ELSE COALESCE(mi.override_carbs, mi.scraped_carbs)
-          END as carbs,
-          CASE WHEN mi.is_assorted
-            THEN COALESCE(child.override_fat, child.scraped_fat)
-            ELSE COALESCE(mi.override_fat, mi.scraped_fat)
-          END as fat,
-          CASE WHEN mi.is_assorted
-            THEN COALESCE(child.override_serving_size, child.scraped_serving_size)
-            ELSE COALESCE(mi.override_serving_size, mi.scraped_serving_size)
-          END as serving_size,
-          CASE WHEN mi.is_assorted THEN child.nutrition_source ELSE mi.nutrition_source END as nutrition_source,
-          CASE WHEN mi.is_assorted THEN child.nutrition_status ELSE mi.nutrition_status END as nutrition_status,
-          CASE WHEN mi.is_assorted
-            THEN EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = child.id)
-            ELSE EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id)
-          END as has_options
+          COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+          COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+          COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+          COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+          COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+          mi.nutrition_source,
+          mi.nutrition_status,
+          EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
         FROM menu_items_master mi
         JOIN stations s ON mi.station_id = s.id
         JOIN dining_halls dh ON s.dining_hall_id = dh.id
         JOIN daily_schedule ds ON ds.menu_item_id = mi.id
-        LEFT JOIN menu_items_master child ON child.parent_item_id = mi.id AND child.is_active = true
         WHERE dh.id = $1
           AND ds.date = $2
           AND mi.is_active = true
-          AND (mi.is_assorted = false OR child.id IS NOT NULL)
+          AND mi.is_assorted = false
       `;
       params.push(selectedDate);
       if (mealType) {
-        query += ` AND (
-          CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END = $3
-          OR CASE WHEN mi.is_assorted THEN COALESCE(child.meal_type, mi.meal_type) ELSE mi.meal_type END = 'all'
-        )`;
+        query += ` AND (mi.meal_type = $3 OR mi.meal_type = 'all')`;
         params.push(mealType);
       }
     }
@@ -324,6 +302,29 @@ app.get('/api/menu-items/:menuItemId/options', authenticateToken, async (req, re
     res.json(result);
   } catch (error) {
     console.error('Error fetching item options:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.get('/api/menu-items/:id/children', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT
+         id, name, meal_type,
+         COALESCE(override_calories, scraped_calories) as calories,
+         COALESCE(override_protein, scraped_protein) as protein,
+         COALESCE(override_carbs, scraped_carbs) as carbs,
+         COALESCE(override_fat, scraped_fat) as fat,
+         COALESCE(override_serving_size, scraped_serving_size) as serving_size,
+         EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = menu_items_master.id) as has_options
+       FROM menu_items_master
+       WHERE parent_item_id = $1 AND is_active = true
+       ORDER BY name`,
+      [req.params.id]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching menu item children:', error);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -471,7 +472,7 @@ app.get('/api/admin/menu-items', authenticateToken, adminOnly, async (req, res) 
     let query = `
       SELECT
         mi.id, mi.name, mi.meal_type, mi.admin_review_status, mi.nutrition_source,
-        mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size, mi.scraped_ingredients,
+        mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
         mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
         COALESCE(mi.override_calories, mi.scraped_calories) as calories,
         COALESCE(mi.override_protein, mi.scraped_protein) as protein,
@@ -591,6 +592,27 @@ app.post('/api/admin/menu-items/:id/children', authenticateToken, adminOnly, asy
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Add child error:', error);
+    if (error.code === '23505') return res.status(400).json({ error: 'An item with that name already exists in this station.' });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.put('/api/admin/menu-items/:id/child-details', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, calories, protein, carbs, fat, serving_size } = req.body;
+    if (!name) return res.status(400).json({ error: 'name required' });
+    const result = await pool.query(
+      `UPDATE menu_items_master SET
+        name = $1, scraped_calories = $2, scraped_protein = $3, scraped_carbs = $4,
+        scraped_fat = $5, scraped_serving_size = $6, updated_at = CURRENT_TIMESTAMP
+       WHERE id = $7 RETURNING *`,
+      [name, calories || null, protein || null, carbs || null, fat || null, serving_size || null, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Child update error:', error);
     if (error.code === '23505') return res.status(400).json({ error: 'An item with that name already exists in this station.' });
     res.status(500).json({ error: 'Server error' });
   }

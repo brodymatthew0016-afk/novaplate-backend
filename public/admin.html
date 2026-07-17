@@ -1320,29 +1320,88 @@
     if (!res || !res.ok) { alert('Failed to update.'); return; }
     const idx = allItems.findIndex(i => i.id === id);
     if (idx !== -1) allItems[idx].is_assorted = checked;
-
-    // Actually rebuild the edit form's HTML in place so the Dispensed Items panel appears/disappears
-    const editRow = document.getElementById(`edit-row-${id}`);
-    if (editRow) {
-      editRow.querySelector('td').innerHTML = renderEditForm(allItems[idx]);
-    }
-    if (checked) loadChildren(id);
+    // Re-render the edit row so the Dispensed Items panel appears/disappears
+    toggleEdit(id); toggleEdit(id);
   }
+
+  let childrenByParent = {};
+  let editingChildId = null;
 
   async function loadChildren(id) {
     const res = await apiFetch(`/api/admin/menu-items/${id}/children`);
     if (!res) return;
-    const children = await res.json();
-    const list = document.getElementById(`children-list-${id}`);
+    childrenByParent[id] = await res.json();
+    renderChildren(id);
+  }
+
+  function renderChildren(parentId) {
+    const list = document.getElementById(`children-list-${parentId}`);
     if (!list) return;
-    list.innerHTML = children.length === 0
-      ? '<span style="color:#aaa; font-size:13px;">No items added yet.</span>'
-      : children.map(c => `
-          <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
-            <span>${escHtml(c.name)} — ${c.scraped_calories ?? '—'} cal</span>
-            <button class="delete-btn" onclick="deleteChild(${c.id}, ${id})">Delete</button>
+    const children = childrenByParent[parentId] || [];
+
+    if (children.length === 0) {
+      list.innerHTML = '<span style="color:#aaa; font-size:13px;">No items added yet.</span>';
+      return;
+    }
+
+    list.innerHTML = children.map(c => {
+      if (editingChildId === c.id) {
+        return `
+          <div style="padding:8px 0; border-bottom:1px solid #f0f0f0;">
+            <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:6px;">
+              <input type="text" id="edit-child-name-${c.id}" value="${escHtml(c.name)}" placeholder="Name" style="width:140px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+              <input type="number" id="edit-child-cal-${c.id}" value="${c.scraped_calories ?? ''}" placeholder="Cal" style="width:60px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+              <input type="number" id="edit-child-pro-${c.id}" value="${c.scraped_protein ?? ''}" placeholder="Pro" style="width:60px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+              <input type="number" id="edit-child-carb-${c.id}" value="${c.scraped_carbs ?? ''}" placeholder="Carb" style="width:60px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+              <input type="number" id="edit-child-fat-${c.id}" value="${c.scraped_fat ?? ''}" placeholder="Fat" style="width:60px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+              <input type="text" id="edit-child-serving-${c.id}" value="${escHtml(c.scraped_serving_size ?? '')}" placeholder="Serving" style="width:90px; padding:6px 8px; border:1px solid #003087; border-radius:6px; font-size:13px;" />
+            </div>
+            <div style="display:flex; gap:8px;">
+              <button class="btn-save" style="padding:5px 12px; font-size:12px;" onclick="saveChildEdit(${c.id}, ${parentId})">Save</button>
+              <button class="btn-cancel" style="padding:5px 8px; font-size:12px;" onclick="cancelChildEdit(${parentId})">Cancel</button>
+            </div>
           </div>
-        `).join('');
+        `;
+      }
+      return `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
+          <span>${escHtml(c.name)} — ${c.scraped_calories ?? '—'} cal</span>
+          <span style="display:flex; gap:6px;">
+            <button class="edit-btn" style="padding:3px 8px; font-size:11px;" onclick="startEditChild(${c.id}, ${parentId})">Edit</button>
+            <button class="delete-btn" onclick="deleteChild(${c.id}, ${parentId})">Delete</button>
+          </span>
+        </div>
+      `;
+    }).join('');
+  }
+
+  function startEditChild(childId, parentId) {
+    editingChildId = childId;
+    renderChildren(parentId);
+  }
+
+  function cancelChildEdit(parentId) {
+    editingChildId = null;
+    renderChildren(parentId);
+  }
+
+  async function saveChildEdit(childId, parentId) {
+    const name = document.getElementById(`edit-child-name-${childId}`).value.trim();
+    if (!name) return alert('Name required.');
+    const body = {
+      name,
+      calories: document.getElementById(`edit-child-cal-${childId}`).value || null,
+      protein: document.getElementById(`edit-child-pro-${childId}`).value || null,
+      carbs: document.getElementById(`edit-child-carb-${childId}`).value || null,
+      fat: document.getElementById(`edit-child-fat-${childId}`).value || null,
+      serving_size: document.getElementById(`edit-child-serving-${childId}`).value || null,
+    };
+    const res = await apiFetch(`/api/admin/menu-items/${childId}/child-details`, {
+      method: 'PUT', body: JSON.stringify(body)
+    });
+    if (!res || !res.ok) { alert('Save failed.'); return; }
+    editingChildId = null;
+    await loadChildren(parentId);
   }
 
   async function addChildItem(parentId) {
