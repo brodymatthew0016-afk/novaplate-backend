@@ -363,7 +363,6 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
         COALESCE(ml.protein, COALESCE(mi.override_protein, mi.scraped_protein) * COALESCE(ml.servings, 1)) as protein,
         COALESCE(ml.carbs, COALESCE(mi.override_carbs, mi.scraped_carbs) * COALESCE(ml.servings, 1)) as carbs,
         COALESCE(ml.fat, COALESCE(mi.override_fat, mi.scraped_fat) * COALESCE(ml.servings, 1)) as fat
-        COALESCE(mi.override_serving_size, mi.scraped_serving_size) as portion,
        FROM meal_logs ml
        LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
        LEFT JOIN stations s ON mi.station_id = s.id
