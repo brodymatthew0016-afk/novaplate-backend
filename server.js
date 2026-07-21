@@ -333,13 +333,13 @@ app.get('/api/menu-items/:id/children', authenticateToken, async (req, res) => {
 
 app.post('/api/meal-logs', authenticateToken, async (req, res) => {
   try {
-    const { menuItemId, mealType, logDate, servings, calories, protein, carbs, fat, optionsText } = req.body;
+    const { menuItemId, mealType, logDate, servings, portion, calories, protein, carbs, fat, optionsText } = req.body;
     const userId = req.user.userId;
     const result = await pool.query(
-      `INSERT INTO meal_logs (user_id, menu_item_id, meal_type, log_date, servings, calories, protein, carbs, fat, options_text)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `INSERT INTO meal_logs (user_id, menu_item_id, meal_type, log_date, servings, portion, calories, protein, carbs, fat, options_text)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [userId, menuItemId || null, mealType, logDate, servings || 1, calories || null, protein || null, carbs || null, fat || null, optionsText || null]
+      [userId, menuItemId || null, mealType, logDate, servings || 1, portion || null, calories || null, protein || null, carbs || null, fat || null, optionsText || null]
     );
     res.status(201).json(result.rows[0]);
   } catch (error) {

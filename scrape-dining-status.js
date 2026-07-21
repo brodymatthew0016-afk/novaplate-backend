@@ -36,7 +36,15 @@ const HALL_CALENDARS = {
 };
 
 function formatTime(d) {
-  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  // The scraper runs on GitHub Actions, whose runners default to UTC.
+  // Without an explicit timeZone, this would format times using the
+  // server's local time (UTC) instead of Villanova's, causing a 4-5
+  // hour shift depending on daylight saving. Pin it to Eastern time.
+  return d.toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+  });
 }
 
 // Checks a single hall's calendar and returns whether it's open right now,
@@ -46,8 +54,23 @@ async function getHallStatus(calendarId) {
   const data = await ical.async.fromURL(url);
 
   const now = new Date();
-  const startOfDay = new Date(now); startOfDay.setHours(0, 0, 0, 0);
-  const endOfDay = new Date(now); endOfDay.setHours(23, 59, 59, 999);
+
+  // "Today" must be Villanova's calendar day (Eastern), not the server's
+  // local day — on GitHub Actions (UTC) these differ by 4-5 hours, which
+  // would otherwise clip early-morning/late-night events out of the
+  // day's occurrence search. Compute the actual UTC offset for Eastern
+  // time right now (handles EDT/-4 vs EST/-5 automatically).
+  const offsetParts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    timeZoneName: 'shortOffset',
+  }).formatToParts(now);
+  const offsetLabel = offsetParts.find(p => p.type === 'timeZoneName').value; // e.g. "GMT-4"
+  const offsetHours = parseInt(offsetLabel.replace('GMT', ''), 10) || -5; // fallback EST
+  const offsetStr = `${offsetHours <= 0 ? '-' : '+'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`;
+
+  const easternDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
+  const startOfDay = new Date(`${easternDateStr}T00:00:00${offsetStr}`);
+  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
 
   // How far ahead to look for the next opening if the hall is closed now.
   const lookaheadEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
