@@ -738,6 +738,73 @@ app.patch('/api/admin/users/:id/admin', authenticateToken, adminOnly, async (req
   }
 });
 
+// ---- DAILY MENUS ----
+// Read/write what's actually scheduled on a given date for a given (variable)
+// dining hall — i.e. the daily_schedule join, not the fixed-menu items.
+app.get('/api/admin/daily-menu', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { dining_hall_id, date } = req.query;
+    if (!dining_hall_id || !date) {
+      return res.status(400).json({ error: 'dining_hall_id and date are required' });
+    }
+    const result = await pool.query(`
+      SELECT
+        ds.id AS schedule_id,
+        ds.date,
+        mi.id AS menu_item_id,
+        mi.name,
+        mi.meal_type,
+        COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+        COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+        COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+        COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+        COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+        s.name AS station_name
+      FROM daily_schedule ds
+      JOIN menu_items_master mi ON mi.id = ds.menu_item_id
+      JOIN stations s ON s.id = mi.station_id
+      WHERE s.dining_hall_id = $1 AND ds.date = $2
+      ORDER BY s.name, mi.meal_type, mi.name
+    `, [dining_hall_id, date]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin daily menu list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/admin/daily-menu', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { menu_item_id, date } = req.body;
+    if (!menu_item_id || !date) {
+      return res.status(400).json({ error: 'menu_item_id and date are required' });
+    }
+    const result = await pool.query(
+      `INSERT INTO daily_schedule (menu_item_id, date)
+       VALUES ($1, $2)
+       ON CONFLICT (menu_item_id, date) DO NOTHING
+       RETURNING id`,
+      [menu_item_id, date]
+    );
+    res.json({ success: true, alreadyScheduled: result.rows.length === 0 });
+  } catch (error) {
+    console.error('Admin daily menu add error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/admin/daily-menu/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM daily_schedule WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Schedule entry not found' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin daily menu delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== START SERVER ==========
 
 app.listen(PORT, () => {
