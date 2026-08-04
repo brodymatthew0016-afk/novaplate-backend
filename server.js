@@ -645,6 +645,99 @@ app.post('/api/admin/bypass', async (req, res) => {
   res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin } });
 });
 
+// ---- SYSTEM HEALTH ----
+// One row per dining hall: when its open/closed status last updated (from the
+// dining-status scraper), and whether today's menu has been scheduled yet
+// (from the daily-menu scraper). Frontend turns these into red/yellow/green
+// freshness indicators.
+app.get('/api/admin/system-health', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        dh.id,
+        dh.name,
+        dh.type,
+        dh.is_open,
+        dh.status_text,
+        dh.status_updated_at,
+        dh.next_open_at,
+        COALESCE(sched.today_item_count, 0) AS today_item_count,
+        sched.last_scheduled_at
+      FROM dining_halls dh
+      LEFT JOIN (
+        SELECT
+          st.dining_hall_id,
+          COUNT(*) FILTER (WHERE ds.date = CURRENT_DATE) AS today_item_count,
+          MAX(mim.updated_at) AS last_scheduled_at
+        FROM daily_schedule ds
+        JOIN menu_items_master mim ON mim.id = ds.menu_item_id
+        JOIN stations st ON st.id = mim.station_id
+        GROUP BY st.dining_hall_id
+      ) sched ON sched.dining_hall_id = dh.id
+      ORDER BY dh.name
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin system health error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ---- USERS ----
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { search } = req.query;
+    const params = [];
+    let where = '';
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      where = `WHERE u.email ILIKE $${params.length}`;
+    }
+    const result = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.daily_calorie_goal,
+        u.is_admin,
+        u.created_at,
+        COUNT(ml.id) AS meal_log_count,
+        MAX(ml.created_at) AS last_logged_at
+      FROM users u
+      LEFT JOIN meal_logs ml ON ml.user_id = u.id
+      ${where}
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin users list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/admin/users/:id/admin', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_admin } = req.body;
+    if (typeof is_admin !== 'boolean') {
+      return res.status(400).json({ error: 'is_admin must be true or false' });
+    }
+    // Don't let an admin accidentally strip their own admin access from this panel.
+    if (Number(id) === req.user.userId && is_admin === false) {
+      return res.status(400).json({ error: "You can't remove your own admin access." });
+    }
+    const result = await pool.query(
+      'UPDATE users SET is_admin = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, is_admin',
+      [is_admin, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Admin toggle user admin error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== START SERVER ==========
 
 app.listen(PORT, () => {

@@ -216,6 +216,87 @@
     .badge.reviewed { background: #dcfce7; color: #166534; }
     .badge.overridden { background: #dbeafe; color: #1e40af; }
     .badge.needs_count { background: #f3e8ff; color: #6b21a8; }
+    .badge.badge-true { background: #dcfce7; color: #166534; }
+    .badge.badge-false { background: #f1f5f9; color: #64748b; }
+
+    /* ---- SYSTEM HEALTH ---- */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 16px;
+      padding: 24px;
+    }
+
+    .health-card {
+      background: white;
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+      border-left: 4px solid #d1d5db;
+    }
+
+    .health-card.ok { border-left-color: #16a34a; }
+    .health-card.warn { border-left-color: #d97706; }
+    .health-card.stale { border-left-color: #dc2626; }
+
+    .health-card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 10px;
+    }
+
+    .health-card-header h4 { font-size: 15px; font-weight: 600; }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d1d5db;
+      flex-shrink: 0;
+    }
+
+    .status-dot.ok { background: #16a34a; }
+    .status-dot.warn { background: #d97706; }
+    .status-dot.stale { background: #dc2626; }
+
+    .health-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 13px;
+      color: #555;
+      padding: 4px 0;
+    }
+
+    .health-row span:last-child { color: #1a1a1a; font-weight: 500; }
+
+    /* ---- USERS ---- */
+    .users-toolbar {
+      display: flex;
+      gap: 10px;
+      padding: 20px 24px 0;
+    }
+
+    .users-toolbar input[type="text"] {
+      flex: 1;
+      max-width: 320px;
+      padding: 10px 14px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+
+    .btn-toggle-admin {
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      cursor: pointer;
+      border: 1px solid #cbd5e1;
+      background: white;
+      color: #334155;
+    }
+
+    .btn-toggle-admin:hover { background: #f8fafc; }
 
     .item-name { font-weight: 500; }
     .item-sub { font-size: 12px; color: #888; margin-top: 2px; }
@@ -623,6 +704,8 @@
   <div class="tab-bar">
     <button class="tab-btn active" onclick="switchTab('nutrition')">Nutrition Review</button>
     <button class="tab-btn" onclick="switchTab('fixed')">Fixed Menus</button>
+    <button class="tab-btn" onclick="switchTab('health')">System Health</button>
+    <button class="tab-btn" onclick="switchTab('users')">Users</button>
   </div>
 
   <!-- NUTRITION REVIEW TAB -->
@@ -791,6 +874,39 @@
       </div>
     </div>
   </div>
+
+  <!-- SYSTEM HEALTH TAB -->
+  <div class="tab-panel" id="tab-health">
+    <div class="health-grid" id="health-grid">
+      <div class="loading" style="padding: 20px;">Loading...</div>
+    </div>
+  </div>
+
+  <!-- USERS TAB -->
+  <div class="tab-panel" id="tab-users">
+    <div class="users-toolbar">
+      <input type="text" id="users-search-input" placeholder="Search by email..." oninput="debounceLoadUsers()" />
+      <span class="count-label" id="users-count-label"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Calorie Goal</th>
+            <th>Meals Logged</th>
+            <th>Last Logged</th>
+            <th>Joined</th>
+            <th>Admin</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="7" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -858,11 +974,20 @@
   // ---- TABS ----
   function switchTab(tab) {
     document.querySelectorAll('.tab-btn').forEach((btn, i) => {
-      btn.classList.toggle('active', (i === 0 && tab === 'nutrition') || (i === 1 && tab === 'fixed'));
+      btn.classList.toggle('active',
+        (i === 0 && tab === 'nutrition') ||
+        (i === 1 && tab === 'fixed') ||
+        (i === 2 && tab === 'health') ||
+        (i === 3 && tab === 'users')
+      );
     });
     document.getElementById('tab-nutrition').classList.toggle('active', tab === 'nutrition');
     document.getElementById('tab-fixed').classList.toggle('active', tab === 'fixed');
+    document.getElementById('tab-health').classList.toggle('active', tab === 'health');
+    document.getElementById('tab-users').classList.toggle('active', tab === 'users');
     if (tab === 'fixed') loadFixedMenusTab();
+    if (tab === 'health') loadSystemHealth();
+    if (tab === 'users') loadUsers();
   }
 
   // ---- HALL TABS ----
@@ -1526,9 +1651,117 @@
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   }
 
+  // ---- RELATIVE TIME HELPER ----
+  function timeAgo(isoString) {
+    if (!isoString) return 'Never';
+    const then = new Date(isoString).getTime();
+    const diffMs = Date.now() - then;
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return 'Just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  }
+
+  // ---- SYSTEM HEALTH ----
+  async function loadSystemHealth() {
+    const grid = document.getElementById('health-grid');
+    grid.innerHTML = '<div class="loading" style="padding: 20px;">Loading...</div>';
+    const res = await apiFetch('/api/admin/system-health');
+    if (!res) return;
+    const halls = await res.json();
+    renderHealthCards(halls);
+  }
+
+  function renderHealthCards(halls) {
+    const grid = document.getElementById('health-grid');
+    if (halls.length === 0) {
+      grid.innerHTML = '<div class="empty" style="padding: 20px;">No dining halls found.</div>';
+      return;
+    }
+
+    grid.innerHTML = halls.map(h => {
+      const statusMins = h.status_updated_at ? (Date.now() - new Date(h.status_updated_at).getTime()) / 60000 : Infinity;
+      const hasTodayItems = Number(h.today_item_count) > 0;
+
+      // Green: status pinged in the last 20 min AND today's menu is populated.
+      // Yellow: status is a bit stale (20min-2hr) or menu missing but hall not open yet.
+      // Red: status hasn't updated in 2+ hours, or hall is open with no menu scheduled today.
+      let level = 'ok';
+      if (statusMins > 120 || (h.is_open && !hasTodayItems)) level = 'stale';
+      else if (statusMins > 20 || !hasTodayItems) level = 'warn';
+
+      return `
+        <div class="health-card ${level}">
+          <div class="health-card-header">
+            <h4>${escHtml(h.name)}</h4>
+            <div class="status-dot ${level}"></div>
+          </div>
+          <div class="health-row"><span>Open now</span><span>${h.is_open ? 'Yes' : 'No'}</span></div>
+          <div class="health-row"><span>Status text</span><span>${escHtml(h.status_text)}</span></div>
+          <div class="health-row"><span>Status pinged</span><span>${timeAgo(h.status_updated_at)}</span></div>
+          <div class="health-row"><span>Items scheduled today</span><span>${h.today_item_count}</span></div>
+          <div class="health-row"><span>Menu last updated</span><span>${timeAgo(h.last_scheduled_at)}</span></div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  // ---- USERS ----
+  let usersDebounceTimer = null;
+  function debounceLoadUsers() {
+    clearTimeout(usersDebounceTimer);
+    usersDebounceTimer = setTimeout(loadUsers, 300);
+  }
+
+  async function loadUsers() {
+    const tbody = document.getElementById('users-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" class="loading">Loading...</td></tr>';
+    const search = document.getElementById('users-search-input').value.trim();
+    const qs = search ? `?search=${encodeURIComponent(search)}` : '';
+    const res = await apiFetch(`/api/admin/users${qs}`);
+    if (!res) return;
+    const users = await res.json();
+    renderUsersTable(users);
+  }
+
+  function renderUsersTable(users) {
+    const tbody = document.getElementById('users-tbody');
+    document.getElementById('users-count-label').textContent = `${users.length} user${users.length === 1 ? '' : 's'}`;
+    if (users.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="7" class="empty">No users found.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = users.map(u => `
+      <tr id="user-row-${u.id}">
+        <td>${escHtml(u.email)}</td>
+        <td>${u.daily_calorie_goal ?? '—'}</td>
+        <td>${u.meal_log_count}</td>
+        <td>${timeAgo(u.last_logged_at)}</td>
+        <td>${new Date(u.created_at).toLocaleDateString()}</td>
+        <td><span class="badge ${u.is_admin ? 'badge-true' : 'badge-false'}">${u.is_admin ? 'True' : 'False'}</span></td>
+        <td><button class="btn-toggle-admin" onclick="toggleAdmin(${u.id}, ${!u.is_admin})">${u.is_admin ? 'Revoke Admin' : 'Make Admin'}</button></td>
+      </tr>
+    `).join('');
+  }
+
+  async function toggleAdmin(id, newValue) {
+    const res = await apiFetch(`/api/admin/users/${id}/admin`, {
+      method: 'PATCH',
+      body: JSON.stringify({ is_admin: newValue })
+    });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to update user.'); return; }
+    loadUsers();
+  }
+
   document.getElementById('login-password').addEventListener('keydown', e => {
     if (e.key === 'Enter') login();
   });
 </script>
+
 </body>
 </html>
