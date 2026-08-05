@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dining Admin</title>
+  <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="login-screen">
+  <div class="login-box">
+    <h1>Dining Admin</h1>
+    <input type="email" id="login-email" placeholder="Email" />
+    <input type="password" id="login-password" placeholder="Password" />
+    <button onclick="login()">Sign In</button>
+    <div id="login-error"></div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <header>
+    <h1>Dining Admin</h1>
+    <button class="logout-btn" onclick="logout()">Sign Out</button>
+  </header>
+
+  <div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('nutrition')">Nutrition Review</button>
+    <button class="tab-btn" onclick="switchTab('fixed')">Fixed Menus</button>
+    <button class="tab-btn" onclick="switchTab('daily')">Daily Menus</button>
+    <button class="tab-btn" onclick="switchTab('health')">System Health</button>
+    <button class="tab-btn" onclick="switchTab('users')">Users</button>
+  </div>
+
+  <!-- NUTRITION REVIEW TAB -->
+  <div class="tab-panel active" id="tab-nutrition">
+    <div class="stats-bar">
+      <div class="stat-card pending">
+        <div class="label">Needs Review</div>
+        <div class="value" id="stat-pending">—</div>
+      </div>
+      <div class="stat-card overridden">
+        <div class="label">Overridden</div>
+        <div class="value" id="stat-overridden">—</div>
+      </div>
+      <div class="stat-card reviewed">
+        <div class="label">Reviewed</div>
+        <div class="value" id="stat-reviewed">—</div>
+      </div>
+      <div class="stat-card needs-count">
+        <div class="label">Needs Count</div>
+        <div class="value" id="stat-needs-count">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Total Items</div>
+        <div class="value" id="stat-total">—</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <input type="text" id="search-input" placeholder="Search items..." oninput="debounceLoad()" />
+      <select id="hall-filter" onchange="loadItems()">
+        <option value="">All Dining Halls</option>
+      </select>
+      <button class="filter-btn active" id="filter-all" onclick="setFilter('')">All</button>
+      <button class="filter-btn" id="filter-pending" onclick="setFilter('pending')">Needs Review</button>
+      <button class="filter-btn" id="filter-overridden" onclick="setFilter('overridden')">Overridden</button>
+      <button class="filter-btn" id="filter-reviewed" onclick="setFilter('reviewed')">Reviewed</button>
+      <button class="filter-btn" id="filter-needs_count" onclick="setFilter('needs_count')">Needs Count</button>
+      <span class="count-label" id="count-label"></span>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Hall / Station</th>
+            <th>Meal</th>
+            <th>Calories</th>
+            <th>Protein</th>
+            <th>Carbs</th>
+            <th>Fat</th>
+            <th>Serving</th>
+            <th>Ingredients</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="items-tbody">
+          <tr><td colspan="11" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- FIXED MENUS TAB -->
+  <div class="tab-panel" id="tab-fixed">
+    <div class="fixed-menus-wrap">
+      <div class="fixed-menus-header">
+        <h2>Fixed Dining Hall Menus</h2>
+      </div>
+
+      <div class="hall-tabs">
+        <button class="hall-tab-btn active" onclick="switchHall('nova')" id="hall-btn-nova">Café Nova</button>
+        <button class="hall-tab-btn" onclick="switchHall('connelly')" id="hall-btn-connelly">Connelly Center</button>
+      </div>
+
+      <div class="fixed-menus-layout">
+
+        <!-- LEFT: Stations Panel -->
+        <div class="stations-panel">
+          <div class="stations-panel-header">
+            <h3 id="stations-panel-title">Café Nova Stations</h3>
+          </div>
+          <div class="station-list" id="station-list">
+            <div class="loading" style="padding: 20px; font-size: 13px;">Loading...</div>
+          </div>
+          <div class="add-station-form">
+            <input type="text" id="new-station-name" placeholder="New station name..." />
+            <button class="btn-add-station" onclick="addStation()">Add</button>
+          </div>
+          <div id="station-msg" class="station-msg"></div>
+        </div>
+
+        <!-- RIGHT: Add Item + Items List -->
+        <div class="items-column">
+
+          <div class="add-item-card">
+            <h3 id="add-item-title">Add Item to Café Nova</h3>
+            <div class="form-grid">
+              <div class="form-field">
+                <label>Item Name</label>
+                <input type="text" id="new-item-name" placeholder="e.g. Chicken Parm" />
+              </div>
+              <div class="form-field">
+                <label>Station</label>
+                <select id="new-item-station">
+                  <option value="">Select station...</option>
+                </select>
+              </div>
+              <div class="form-field">
+                <label>Calories</label>
+                <input type="number" id="new-item-cal" placeholder="e.g. 450" />
+              </div>
+              <div class="form-field">
+                <label>Protein (g)</label>
+                <input type="number" id="new-item-pro" placeholder="e.g. 30" />
+              </div>
+              <div class="form-field">
+                <label>Carbs (g)</label>
+                <input type="number" id="new-item-carb" placeholder="e.g. 40" />
+              </div>
+              <div class="form-field">
+                <label>Fat (g)</label>
+                <input type="number" id="new-item-fat" placeholder="e.g. 15" />
+              </div>
+            </div>
+            <div class="form-row-2">
+              <div class="form-field">
+                <label>Serving Size</label>
+                <input type="text" id="new-item-serving" placeholder="e.g. 1 sandwich" />
+              </div>
+              <div class="form-field" style="justify-content: flex-end;">
+                <button class="btn-add" onclick="addFixedItem()">+ Add Item</button>
+              </div>
+            </div>
+            <div id="add-item-msg"></div>
+          </div>
+
+          <div class="fixed-items-card">
+            <div class="fixed-items-card-header">
+              <h3 id="fixed-items-title">Café Nova Items</h3>
+              <span id="fixed-items-count"></span>
+            </div>
+            <table style="width:100%; border-collapse:collapse;">
+              <thead style="background:#f8fafc; border-bottom: 2px solid #e5e7eb;">
+                <tr>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Item</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Station</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Meal</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Cal</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Pro</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Carbs</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Fat</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Serving</th>
+                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Ingredients</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="fixed-items-tbody">
+                <tr><td colspan="10" class="loading">Loading...</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAILY MENUS TAB -->
+  <div class="tab-panel" id="tab-daily">
+    <div class="daily-toolbar">
+      <div class="form-field">
+        <label>Dining Hall</label>
+        <select id="daily-hall-select" onchange="loadDailyMenu()">
+          <option value="">Select hall...</option>
+        </select>
+      </div>
+      <div class="form-field">
+        <label>Date</label>
+        <input type="date" id="daily-date-input" onchange="loadDailyMenu()" />
+      </div>
+      <span class="count-label" id="daily-count-label"></span>
+    </div>
+
+    <div class="daily-add-wrap">
+      <input type="text" id="daily-add-search" placeholder="Search items to add to this day's menu..." oninput="debounceDailySearch()" autocomplete="off" />
+      <div class="daily-add-results" id="daily-add-results" style="display:none;"></div>
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Item</th>
+            <th>Station</th>
+            <th>Meal</th>
+            <th>Calories</th>
+            <th>Protein</th>
+            <th>Carbs</th>
+            <th>Fat</th>
+            <th>Serving</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="daily-tbody">
+          <tr><td colspan="9" class="empty">Pick a dining hall and date above.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SYSTEM HEALTH TAB -->
+  <div class="tab-panel" id="tab-health">
+    <div class="health-grid" id="health-grid">
+      <div class="loading" style="padding: 20px;">Loading...</div>
+    </div>
+  </div>  <!-- USERS TAB -->
+  <div class="tab-panel" id="tab-users">
+    <div class="users-toolbar">
+      <input type="text" id="users-search-input" placeholder="Search by email..." oninput="debounceLoadUsers()" />
+      <span class="count-label" id="users-count-label"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Email</th>
+            <th>Calorie Goal</th>
+            <th>Meals Logged</th>
+            <th>Last Logged</th>
+            <th>Joined</th>
+            <th>Admin</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="users-tbody">
+          <tr><td colspan="7" class="loading">Loading...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script src="js/utils.js"></script>
+<script src="js/state.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/tabs.js"></script>
+<script src="js/fixed-menus.js"></script>
+<script src="js/nutrition.js"></script>
+<script src="js/daily-menus.js"></script>
+<script src="js/system-health.js"></script>
+<script src="js/users.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
