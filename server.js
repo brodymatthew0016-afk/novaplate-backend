@@ -12,9 +12,6 @@ app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
 app.use(express.static('public'));
 
-// Old admin panel URL — it used to be a single public/admin.html file,
-// now it's public/admin/ (index.html + admin.css + js/*.js). Keep old
-// bookmarks/links working by redirecting to the new location.
 app.get('/admin.html', (req, res) => res.redirect('/admin/'));
 
 const pool = new Pool({
@@ -648,6 +645,166 @@ app.post('/api/admin/bypass', async (req, res) => {
   const user = result.rows[0];
   const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, process.env.JWT_SECRET);
   res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin } });
+});
+
+// ---- SYSTEM HEALTH ----
+// One row per dining hall: when its open/closed status last updated (from the
+// dining-status scraper), and whether today's menu has been scheduled yet
+// (from the daily-menu scraper). Frontend turns these into red/yellow/green
+// freshness indicators.
+app.get('/api/admin/system-health', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT
+        dh.id,
+        dh.name,
+        dh.type,
+        dh.is_open,
+        dh.status_text,
+        dh.status_updated_at,
+        dh.next_open_at,
+        COALESCE(sched.today_item_count, 0) AS today_item_count,
+        sched.last_scheduled_at
+      FROM dining_halls dh
+      LEFT JOIN (
+        SELECT
+          st.dining_hall_id,
+          COUNT(*) FILTER (WHERE ds.date = CURRENT_DATE) AS today_item_count,
+          MAX(mim.updated_at) AS last_scheduled_at
+        FROM daily_schedule ds
+        JOIN menu_items_master mim ON mim.id = ds.menu_item_id
+        JOIN stations st ON st.id = mim.station_id
+        GROUP BY st.dining_hall_id
+      ) sched ON sched.dining_hall_id = dh.id
+      ORDER BY dh.name
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin system health error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ---- USERS ----
+app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { search } = req.query;
+    const params = [];
+    let where = '';
+    if (search && search.trim()) {
+      params.push(`%${search.trim()}%`);
+      where = `WHERE u.email ILIKE $${params.length}`;
+    }
+    const result = await pool.query(`
+      SELECT
+        u.id,
+        u.email,
+        u.daily_calorie_goal,
+        u.is_admin,
+        u.created_at,
+        COUNT(ml.id) AS meal_log_count,
+        MAX(ml.created_at) AS last_logged_at
+      FROM users u
+      LEFT JOIN meal_logs ml ON ml.user_id = u.id
+      ${where}
+      GROUP BY u.id
+      ORDER BY u.created_at DESC
+    `, params);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin users list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.patch('/api/admin/users/:id/admin', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { is_admin } = req.body;
+    if (typeof is_admin !== 'boolean') {
+      return res.status(400).json({ error: 'is_admin must be true or false' });
+    }
+    // Don't let an admin accidentally strip their own admin access from this panel.
+    if (Number(id) === req.user.userId && is_admin === false) {
+      return res.status(400).json({ error: "You can't remove your own admin access." });
+    }
+    const result = await pool.query(
+      'UPDATE users SET is_admin = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2 RETURNING id, email, is_admin',
+      [is_admin, id]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Admin toggle user admin error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ---- DAILY MENUS ----
+// Read/write what's actually scheduled on a given date for a given (variable)
+// dining hall — i.e. the daily_schedule join, not the fixed-menu items.
+app.get('/api/admin/daily-menu', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { dining_hall_id, date } = req.query;
+    if (!dining_hall_id || !date) {
+      return res.status(400).json({ error: 'dining_hall_id and date are required' });
+    }
+    const result = await pool.query(`
+      SELECT
+        ds.id AS schedule_id,
+        ds.date,
+        mi.id AS menu_item_id,
+        mi.name,
+        mi.meal_type,
+        COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+        COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+        COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+        COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+        COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+        s.name AS station_name
+      FROM daily_schedule ds
+      JOIN menu_items_master mi ON mi.id = ds.menu_item_id
+      JOIN stations s ON s.id = mi.station_id
+      WHERE s.dining_hall_id = $1 AND ds.date = $2
+      ORDER BY s.name, mi.meal_type, mi.name
+    `, [dining_hall_id, date]);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Admin daily menu list error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.post('/api/admin/daily-menu', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { menu_item_id, date } = req.body;
+    if (!menu_item_id || !date) {
+      return res.status(400).json({ error: 'menu_item_id and date are required' });
+    }
+    const result = await pool.query(
+      `INSERT INTO daily_schedule (menu_item_id, date)
+       VALUES ($1, $2)
+       ON CONFLICT (menu_item_id, date) DO NOTHING
+       RETURNING id`,
+      [menu_item_id, date]
+    );
+    res.json({ success: true, alreadyScheduled: result.rows.length === 0 });
+  } catch (error) {
+    console.error('Admin daily menu add error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+app.delete('/api/admin/daily-menu/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const result = await pool.query('DELETE FROM daily_schedule WHERE id = $1 RETURNING id', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Schedule entry not found' });
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Admin daily menu delete error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ========== START SERVER ==========
