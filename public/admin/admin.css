@@ -67,16 +67,15 @@
     }
 
     .sidebar-logo {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      font-size: 17px;
-      font-weight: 700;
-      color: #1a1a1a;
       padding: 6px 10px 24px;
     }
 
-    .sidebar-logo-icon { font-size: 20px; }
+    .sidebar-wordmark {
+      font-size: 22px;
+      font-weight: 800;
+      color: #003D7A;
+      line-height: 1.1;
+    }
 
     .sidebar-nav {
       display: flex;
