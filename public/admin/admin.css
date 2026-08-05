@@ -67,7 +67,17 @@
     }
 
     .sidebar-logo {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       padding: 6px 10px 24px;
+    }
+
+    .sidebar-logo-img {
+      width: 34px;
+      height: 34px;
+      object-fit: contain;
+      border-radius: 6px;
     }
 
     .sidebar-wordmark {
