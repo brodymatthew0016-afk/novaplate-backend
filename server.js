@@ -227,6 +227,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
           COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
           COALESCE(mi.override_fat, mi.scraped_fat) as fat,
           COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+          mi.scraped_ingredients as ingredients,
           mi.nutrition_source,
           mi.nutrition_status,
           EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
@@ -257,6 +258,7 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
           COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
           COALESCE(mi.override_fat, mi.scraped_fat) as fat,
           COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+          mi.scraped_ingredients as ingredients,
           mi.nutrition_source,
           mi.nutrition_status,
           EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
