@@ -47,52 +47,79 @@
     .login-box button:hover { background: #002070; }
     #login-error { color: #c00; font-size: 13px; margin-top: 8px; }
 
-    #app { display: none; }
+    #app {
+      display: none;
+      min-height: 100vh;
+    }
 
-    header {
-      background: #003087;
-      color: white;
-      padding: 16px 24px;
+    /* ---- SIDEBAR ---- */
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      background: white;
+      border-right: 1px solid #e5e7eb;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 14px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+    }
+
+    .sidebar-logo {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      gap: 10px;
+      font-size: 17px;
+      font-weight: 700;
+      color: #1a1a1a;
+      padding: 6px 10px 24px;
     }
 
-    header h1 { font-size: 18px; font-weight: 700; }
+    .sidebar-logo-icon { font-size: 20px; }
 
-    .logout-btn {
-      background: rgba(255,255,255,0.15);
-      border: none;
-      color: white;
-      padding: 6px 14px;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 13px;
-    }
-
-    /* ---- TABS ---- */
-    .tab-bar {
-      background: white;
-      border-bottom: 1px solid #e5e7eb;
-      padding: 0 24px;
+    .sidebar-nav {
       display: flex;
-      gap: 0;
+      flex-direction: column;
+      gap: 2px;
     }
 
-    .tab-btn {
-      padding: 14px 20px;
+    .sidebar-bottom {
+      margin-top: auto;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+    }
+
+    .tab-btn, .sidebar-nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      width: 100%;
+      padding: 10px 12px;
       border: none;
       background: transparent;
+      border-radius: 8px;
       font-size: 14px;
       font-weight: 500;
-      color: #666;
+      color: #555;
       cursor: pointer;
-      border-bottom: 2px solid transparent;
-      margin-bottom: -1px;
+      text-align: left;
     }
 
-    .tab-btn.active { color: #003087; border-bottom-color: #003087; }
-    .tab-btn:hover:not(.active) { color: #333; }
+    .tab-btn:hover:not(.active), .sidebar-nav-item:hover { background: #f5f6f8; color: #333; }
+    .tab-btn.active { background: #eef2fb; color: #003087; font-weight: 700; }
+
+    .nav-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+    .logout-btn { color: #c00; }
+    .logout-btn:hover { background: #fef2f2; color: #c00; }
+
+    /* ---- MAIN CONTENT ---- */
+    .main-content {
+      flex: 1;
+      min-width: 0;
+      overflow-y: auto;
+    }
 
     .tab-panel { display: none; }
     .tab-panel.active { display: block; }
