@@ -405,6 +405,40 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    const result = await pool.query(
+      `SELECT * FROM (
+         SELECT DISTINCT ON (COALESCE(ml.menu_item_id::text, 'log-' || ml.id::text))
+           ml.id,
+           ml.menu_item_id,
+           ml.meal_type,
+           ml.portion,
+           ml.created_at,
+           mi.name,
+           COALESCE(ml.calories, COALESCE(mi.override_calories, mi.scraped_calories) * COALESCE(ml.servings, 1)) as calories,
+           dh.name as dining_hall_name,
+           EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
+         FROM meal_logs ml
+         LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
+         LEFT JOIN stations s ON mi.station_id = s.id
+         LEFT JOIN dining_halls dh ON s.dining_hall_id = dh.id
+         WHERE ml.user_id = $1
+         ORDER BY COALESCE(ml.menu_item_id::text, 'log-' || ml.id::text), ml.created_at DESC
+       ) recent
+       ORDER BY created_at DESC
+       LIMIT $2`,
+      [userId, limit]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching recent items:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
