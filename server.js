@@ -508,6 +508,20 @@ app.put('/api/user/goal', authenticateToken, async (req, res) => {
   }
 });
 
+// Permanently deletes the authenticated user's account. meal_logs.user_id has
+// ON DELETE CASCADE, so their diary history goes with it automatically.
+app.delete('/api/user/account', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.userId;
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id', [userId]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'Account deleted' });
+  } catch (error) {
+    console.error('Error deleting account:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== ADMIN ROUTES ==========
 
 app.get('/api/admin/stats', authenticateToken, adminOnly, async (req, res) => {
