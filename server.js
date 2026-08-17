@@ -371,7 +371,7 @@ app.get('/api/meal-logs', authenticateToken, async (req, res) => {
        LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
        LEFT JOIN stations s ON mi.station_id = s.id
        LEFT JOIN dining_halls dh ON s.dining_hall_id = dh.id
-       WHERE ml.user_id = $1 AND ml.log_date = $2
+       WHERE ml.user_id = $1 AND ml.log_date = $2 AND ml.deleted_at IS NULL
        ORDER BY ml.created_at`,
       [userId, selectedDate]
     );
@@ -395,7 +395,7 @@ app.get('/api/meal-logs/totals', authenticateToken, async (req, res) => {
         COALESCE(SUM(COALESCE(ml.fat, COALESCE(mi.override_fat, mi.scraped_fat) * COALESCE(ml.servings, 1))), 0) as total_fat
        FROM meal_logs ml
        LEFT JOIN menu_items_master mi ON ml.menu_item_id = mi.id
-       WHERE ml.user_id = $1 AND ml.log_date = $2`,
+       WHERE ml.user_id = $1 AND ml.log_date = $2 AND ml.deleted_at IS NULL`,
       [userId, selectedDate]
     );
     res.json(result.rows[0]);
@@ -409,6 +409,9 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.userId;
     const limit = Math.min(parseInt(req.query.limit, 10) || 10, 50);
+    // Intentionally does NOT filter out ml.deleted_at rows: an item the user
+    // removed from their diary should still show up here as a quick re-add,
+    // using whatever log (deleted or not) was most recently created.
     const result = await pool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (COALESCE(ml.menu_item_id::text, 'log-' || ml.id::text))
@@ -445,8 +448,13 @@ app.delete('/api/meal-logs/:id', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
     const userId = req.user.userId;
+    // Soft delete: mark the log as removed instead of dropping the row, so it
+    // still counts toward "Recently Logged" even after a user removes it from
+    // their diary. Diary views and totals filter on deleted_at IS NULL.
     const result = await pool.query(
-      'DELETE FROM meal_logs WHERE id = $1 AND user_id = $2 RETURNING *',
+      `UPDATE meal_logs SET deleted_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+       RETURNING *`,
       [id, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'Meal log not found' });
@@ -743,7 +751,7 @@ app.get('/api/admin/users', authenticateToken, adminOnly, async (req, res) => {
         COUNT(ml.id) AS meal_log_count,
         MAX(ml.created_at) AS last_logged_at
       FROM users u
-      LEFT JOIN meal_logs ml ON ml.user_id = u.id
+      LEFT JOIN meal_logs ml ON ml.user_id = u.id AND ml.deleted_at IS NULL
       ${where}
       GROUP BY u.id
       ORDER BY u.created_at DESC
