@@ -412,17 +412,29 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
     // Intentionally does NOT filter out ml.deleted_at rows: an item the user
     // removed from their diary should still show up here as a quick re-add,
     // using whatever log (deleted or not) was most recently created.
+    //
+    // `id` is mi.id (the menu item's own id), NOT ml.id (the meal_log row's
+    // id) — FoodDetailScreen uses item.id both to fetch that item's
+    // customization options (getItemOptions) and as the menuItemId when
+    // re-logging it, so this has to match the same shape /api/menu/:hallId
+    // returns. Returning ml.id here was pulling in a totally unrelated menu
+    // item's options/macros whenever the ids happened to collide, which is
+    // why calories/macros looked wrong and ingredients were missing.
     const result = await pool.query(
       `SELECT * FROM (
          SELECT DISTINCT ON (COALESCE(ml.menu_item_id::text, 'log-' || ml.id::text))
-           ml.id,
+           mi.id,
            ml.menu_item_id,
            ml.meal_type,
            ml.portion,
            ml.created_at,
            mi.name,
            COALESCE(ml.calories, COALESCE(mi.override_calories, mi.scraped_calories) * COALESCE(ml.servings, 1)) as calories,
+           COALESCE(ml.protein, COALESCE(mi.override_protein, mi.scraped_protein) * COALESCE(ml.servings, 1)) as protein,
+           COALESCE(ml.carbs, COALESCE(mi.override_carbs, mi.scraped_carbs) * COALESCE(ml.servings, 1)) as carbs,
+           COALESCE(ml.fat, COALESCE(mi.override_fat, mi.scraped_fat) * COALESCE(ml.servings, 1)) as fat,
            COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+           mi.scraped_ingredients as ingredients,
            s.name as station_name,
            dh.name as dining_hall_name,
            EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
