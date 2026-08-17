@@ -419,6 +419,8 @@ app.get('/api/meal-logs/recent', authenticateToken, async (req, res) => {
            ml.created_at,
            mi.name,
            COALESCE(ml.calories, COALESCE(mi.override_calories, mi.scraped_calories) * COALESCE(ml.servings, 1)) as calories,
+           COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+           s.name as station_name,
            dh.name as dining_hall_name,
            EXISTS(SELECT 1 FROM option_groups og WHERE og.menu_item_id = mi.id) as has_options
          FROM meal_logs ml
