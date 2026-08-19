@@ -79,6 +79,29 @@ app.post('/api/auth/login', async (req, res) => {
   }
 });
 
+// Lets the app re-check a stored token on launch instead of trusting stale
+// local flags: confirms the token is still valid and returns the user's
+// current onboarding/admin state straight from the database.
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT id, email, is_admin, onboarding_complete FROM users WHERE id = $1',
+      [req.user.userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    const user = result.rows[0];
+    res.json({
+      id: user.id,
+      email: user.email,
+      isAdmin: user.is_admin,
+      onboardingComplete: user.onboarding_complete,
+    });
+  } catch (error) {
+    console.error('Error fetching current user:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ========== DINING HALL ROUTES ==========
 
 app.get('/api/dining-halls', authenticateToken, async (req, res) => {
@@ -710,13 +733,6 @@ app.delete('/api/admin/menu-items/:id/overrides', authenticateToken, adminOnly, 
     console.error('Admin clear overrides error:', error);
     res.status(500).json({ error: 'Server error' });
   }
-});
-
-app.post('/api/admin/bypass', async (req, res) => {
-  const result = await pool.query('SELECT * FROM users WHERE email = $1', ['tmhansen16@gmail.com']);
-  const user = result.rows[0];
-  const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, process.env.JWT_SECRET);
-  res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin } });
 });
 
 // ---- SYSTEM HEALTH ----
