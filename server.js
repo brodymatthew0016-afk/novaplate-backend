@@ -50,12 +50,12 @@ app.post('/api/auth/signup', async (req, res) => {
     if (existingUser.rows.length > 0) return res.status(400).json({ error: 'Email already registered' });
     const hashedPassword = await bcrypt.hash(password, 10);
     const result = await pool.query(
-      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, is_admin',
+      'INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING id, email, is_admin, onboarding_complete',
       [email.toLowerCase(), hashedPassword]
     );
     const user = result.rows[0];
     const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: false }, process.env.JWT_SECRET);
-    res.status(201).json({ token, user: { id: user.id, email: user.email, isAdmin: false } });
+    res.status(201).json({ token, user: { id: user.id, email: user.email, isAdmin: false, onboardingComplete: user.onboarding_complete } });
   } catch (error) {
     console.error('Signup error:', error);
     res.status(500).json({ error: 'Server error during signup' });
@@ -72,7 +72,7 @@ app.post('/api/auth/login', async (req, res) => {
     const validPassword = await bcrypt.compare(password, user.password_hash);
     if (!validPassword) return res.status(401).json({ error: 'Invalid credentials' });
     const token = jwt.sign({ userId: user.id, email: user.email, isAdmin: user.is_admin }, process.env.JWT_SECRET);
-    res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin } });
+    res.json({ token, user: { id: user.id, email: user.email, isAdmin: user.is_admin, onboardingComplete: user.onboarding_complete } });
   } catch (error) {
     console.error('Login error:', error);
     res.status(500).json({ error: 'Server error during login' });
@@ -497,11 +497,11 @@ app.put('/api/user/goal', authenticateToken, async (req, res) => {
     const { daily_calorie_goal } = req.body;
     if (!daily_calorie_goal || daily_calorie_goal <= 0) return res.status(400).json({ error: 'Invalid calorie goal' });
     const result = await pool.query(
-      'UPDATE users SET daily_calorie_goal = $1 WHERE id = $2 RETURNING daily_calorie_goal',
+      'UPDATE users SET daily_calorie_goal = $1, onboarding_complete = true WHERE id = $2 RETURNING daily_calorie_goal, onboarding_complete',
       [daily_calorie_goal, userId]
     );
     if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
-    res.json({ daily_calorie_goal: result.rows[0].daily_calorie_goal });
+    res.json({ daily_calorie_goal: result.rows[0].daily_calorie_goal, onboardingComplete: result.rows[0].onboarding_complete });
   } catch (error) {
     console.error('Error updating calorie goal:', error);
     res.status(500).json({ error: 'Server error' });
