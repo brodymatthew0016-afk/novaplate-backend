@@ -56,10 +56,12 @@ const API = '';
 
     variableHalls = halls.filter(h => h.type === 'variable');
     const dailySelect = document.getElementById('daily-hall-select');
-    variableHalls.forEach(h => {
+    // Daily-menu halls first, then fixed-menu halls (shown read-only).
+    [...variableHalls, ...halls.filter(h => h.type === 'fixed')].forEach(h => {
       const opt = document.createElement('option');
       opt.value = h.id;
-      opt.textContent = h.name;
+      opt.textContent = h.type === 'fixed' ? `${h.name} (fixed menu)` : h.name;
+      opt.dataset.type = h.type;
       dailySelect.appendChild(opt);
     });
   }

@@ -1008,6 +1008,34 @@ app.get('/api/admin/daily-menu', authenticateToken, adminOnly, async (req, res) 
     if (!dining_hall_id || !date) {
       return res.status(400).json({ error: 'dining_hall_id and date are required' });
     }
+
+    // Fixed halls (Café Nova, Connelly) have no daily schedule — their menu is
+    // every active item, unless the hall's calendar says it's closed all day.
+    // Same rule the app uses. schedule_id is null since there's nothing to remove.
+    const hallResult = await pool.query('SELECT * FROM dining_halls WHERE id = $1', [dining_hall_id]);
+    const hall = hallResult.rows[0];
+    if (hall && hall.type === 'fixed') {
+      if (await isClosedAllDay(hall, date)) return res.json([]);
+      const fixed = await pool.query(`
+        SELECT
+          NULL AS schedule_id,
+          mi.id AS menu_item_id,
+          mi.name,
+          mi.meal_type,
+          COALESCE(mi.override_calories, mi.scraped_calories) as calories,
+          COALESCE(mi.override_protein, mi.scraped_protein) as protein,
+          COALESCE(mi.override_carbs, mi.scraped_carbs) as carbs,
+          COALESCE(mi.override_fat, mi.scraped_fat) as fat,
+          COALESCE(mi.override_serving_size, mi.scraped_serving_size) as serving_size,
+          s.name AS station_name
+        FROM menu_items_master mi
+        JOIN stations s ON s.id = mi.station_id
+        WHERE s.dining_hall_id = $1 AND mi.is_active = true AND mi.is_assorted = false
+        ORDER BY s.name, mi.meal_type, mi.name
+      `, [dining_hall_id]);
+      return res.json(fixed.rows);
+    }
+
     const result = await pool.query(`
       SELECT
         ds.id AS schedule_id,

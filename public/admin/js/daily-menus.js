@@ -17,8 +17,18 @@
     loadDailyMenu();
   }
 
+  function dailyHallIsFixed() {
+    const select = document.getElementById('daily-hall-select');
+    const opt = select.options[select.selectedIndex];
+    return !!opt && opt.dataset.type === 'fixed';
+  }
+
   async function loadDailyMenu() {
     const hallId = document.getElementById('daily-hall-select').value;
+    // Fixed halls aren't scheduled day by day, so hide "add to this day".
+    const isFixed = dailyHallIsFixed();
+    document.querySelector('.daily-add-wrap').style.display = isFixed ? 'none' : '';
+    document.getElementById('daily-add-results').style.display = 'none';
     const date = document.getElementById('daily-date-input').value;
     dailySelectedHallId = hallId;
     const tbody = document.getElementById('daily-tbody');
@@ -36,9 +46,13 @@
 
   function renderDailyMenuTable(rows) {
     const tbody = document.getElementById('daily-tbody');
-    document.getElementById('daily-count-label').textContent = `${rows.length} item${rows.length === 1 ? '' : 's'} scheduled`;
+    const isFixed = dailyHallIsFixed();
+    document.getElementById('daily-count-label').textContent =
+      `${rows.length} item${rows.length === 1 ? '' : 's'} ${isFixed ? 'on the menu' : 'scheduled'}`;
     if (rows.length === 0) {
-      tbody.innerHTML = '<tr><td colspan="9" class="empty">Nothing scheduled for this hall on this date yet.</td></tr>';
+      tbody.innerHTML = isFixed
+        ? '<tr><td colspan="9" class="empty">Closed this day (per its calendar), so no menu shows in the app.</td></tr>'
+        : '<tr><td colspan="9" class="empty">Nothing scheduled for this hall on this date yet.</td></tr>';
       return;
     }
     tbody.innerHTML = rows.map(r => `
@@ -51,7 +65,9 @@
         <td>${r.carbs ?? '—'}</td>
         <td>${r.fat ?? '—'}</td>
         <td>${escHtml(r.serving_size)}</td>
-        <td><button class="delete-btn" onclick="removeDailyMenuItem(${r.schedule_id})">Remove</button></td>
+        <td>${r.schedule_id != null
+          ? `<button class="delete-btn" onclick="removeDailyMenuItem(${r.schedule_id})">Remove</button>`
+          : '<span style="color:#aaa;font-size:12px;">Edit in Fixed Menus</span>'}</td>
       </tr>
     `).join('');
   }
