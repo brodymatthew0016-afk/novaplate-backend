@@ -197,7 +197,7 @@
         </div>
         <div class="field">
           <label>Station</label>
-          <select id="fx-station-${item.id}" ${fromNutrislice ? 'disabled' : ''}>${stations}</select>
+          <select id="fx-station-${item.id}">${stations}</select>
         </div>
         <div class="field"><label>Calories</label><input type="number" id="fx-cal-${item.id}" value="${val(item.override_calories, item.scraped_calories)}" ${ph(item.scraped_calories)}></div>
         <div class="field"><label>Protein (g)</label><input type="number" id="fx-pro-${item.id}" value="${val(item.override_protein, item.scraped_protein)}" ${ph(item.scraped_protein)}></div>
@@ -207,8 +207,8 @@
       </div>
       ${fromNutrislice ? `
         <div class="scraped-hint">
-          From Nutrislice — name and station update automatically. Leave a field blank to use the Nutrislice value (shown in grey);
-          anything you enter is kept even when the scraper runs again.
+          From Nutrislice — the name updates automatically. Leave a field blank to use the Nutrislice value (shown in grey);
+          the station and anything you enter are kept even when the scraper runs again.
         </div>` : ''}
       <div class="edit-actions" style="margin-top:12px;">
         <button class="btn-save" onclick="saveFixedItem(${item.id}, '${hall}')">Save</button>

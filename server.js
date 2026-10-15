@@ -279,7 +279,8 @@ app.post('/api/admin/fixed-items', authenticateToken, adminOnly, async (req, res
 // - Items from Nutrislice: the scraper rewrites their name and Nutrislice
 //   values on every run, so edits to macros/serving are saved as overrides
 //   (which the scraper never touches). A blank field means "use the Nutrislice
-//   value". Name and station can't be changed for these.
+//   value". They can be moved to another station (the scraper keeps items
+//   where they are), but the name comes from Nutrislice.
 app.put('/api/admin/fixed-items/:id', authenticateToken, adminOnly, async (req, res) => {
   try {
     const id = Number(req.params.id);
@@ -300,14 +301,15 @@ app.put('/api/admin/fixed-items/:id', authenticateToken, adminOnly, async (req, 
     if (found.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
     const item = found.rows[0];
 
+    const stationCheck = await pool.query(
+      'SELECT 1 FROM stations WHERE id = $1 AND dining_hall_id = $2',
+      [station_id, item.dining_hall_id]
+    );
+    if (stationCheck.rows.length === 0) return res.status(400).json({ error: 'Pick a station in this dining hall.' });
+
     let result;
     if (item.nutrislice_food_id == null) {
       if (!name || !String(name).trim()) return res.status(400).json({ error: 'Item name is required.' });
-      const stationCheck = await pool.query(
-        'SELECT 1 FROM stations WHERE id = $1 AND dining_hall_id = $2',
-        [station_id, item.dining_hall_id]
-      );
-      if (stationCheck.rows.length === 0) return res.status(400).json({ error: 'Pick a station in this dining hall.' });
       result = await pool.query(
         `UPDATE menu_items_master SET
            name = $1, station_id = $2,
@@ -334,9 +336,9 @@ app.put('/api/admin/fixed-items/:id', authenticateToken, adminOnly, async (req, 
            override_calories = $1, override_protein = $2, override_carbs = $3,
            override_fat = $4, override_serving_size = $5,
            admin_review_status = $6, nutrition_status = $7,
-           updated_at = CURRENT_TIMESTAMP
-         WHERE id = $8 RETURNING *`,
-        [...o, hasOverrides ? 'overridden' : 'reviewed', hasOverrides ? 'overridden' : 'accepted', id]
+           station_id = $8, updated_at = CURRENT_TIMESTAMP
+         WHERE id = $9 RETURNING *`,
+        [...o, hasOverrides ? 'overridden' : 'reviewed', hasOverrides ? 'overridden' : 'accepted', station_id, id]
       );
     }
     res.json(result.rows[0]);

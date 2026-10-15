@@ -300,16 +300,35 @@ async function scrapeFixedHall(client, hall, cfg, fromDate) {
   const assortedFoodIds = await getAssortedFoodIds(client, hall.id);
   const stationCache = new Map();
 
+  // Where each Nutrislice item already lives in this hall. An admin may have
+  // moved an item to a different station in the portal; keep it there instead
+  // of putting it back in (or duplicating it into) Nutrislice's station.
+  // Ordered so the active, most recently updated copy wins if there are dupes.
+  const existing = await client.query(
+    `SELECT mi.nutrislice_food_id, mi.station_id
+     FROM menu_items_master mi
+     JOIN stations s ON s.id = mi.station_id
+     WHERE s.dining_hall_id = $1
+       AND mi.nutrislice_food_id IS NOT NULL
+       AND mi.parent_item_id IS NULL
+     ORDER BY mi.is_active ASC, mi.updated_at ASC NULLS FIRST`,
+    [hall.id]
+  );
+  const currentStation = new Map(existing.rows.map(r => [Number(r.nutrislice_food_id), r.station_id]));
+
   for (const [foodId, { stationName: rawStation, food, item, menus }] of foods) {
     if (assortedFoodIds.has(foodId)) continue; // admin manages assorted items + their children
 
-    const stationName = cfg.stripPrefix && rawStation.startsWith(cfg.stripPrefix)
-      ? rawStation.slice(cfg.stripPrefix.length)
-      : rawStation;
-    let stationId = stationCache.get(stationName);
+    let stationId = currentStation.get(foodId);
     if (!stationId) {
-      stationId = await upsertStation(client, hall.id, stationName);
-      stationCache.set(stationName, stationId);
+      const stationName = cfg.stripPrefix && rawStation.startsWith(cfg.stripPrefix)
+        ? rawStation.slice(cfg.stripPrefix.length)
+        : rawStation;
+      stationId = stationCache.get(stationName);
+      if (!stationId) {
+        stationId = await upsertStation(client, hall.id, stationName);
+        stationCache.set(stationName, stationId);
+      }
     }
 
     // On every menu this hall has (or a single all-day menu) -> 'all';
