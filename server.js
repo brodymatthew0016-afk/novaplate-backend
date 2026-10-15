@@ -13,6 +13,7 @@ app.use(express.json());
 app.use(express.static('public'));
 
 app.get('/admin.html', (req, res) => res.redirect('/admin/'));
+app.get('/', (req, res) => res.redirect('/admin/'));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
