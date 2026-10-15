@@ -10,10 +10,11 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors({ origin: '*', credentials: true }));
 app.use(express.json());
+// The admin portal is served from the site root (e.g. admin-novaplate.up.railway.app/)
+// so "/admin" never shows in the address bar. Old /admin links redirect to it.
+app.get(['/admin', '/admin.html', '/admin/index.html'], (req, res) => res.redirect('/'));
+app.use(express.static('public/admin'));
 app.use(express.static('public'));
-
-app.get('/admin.html', (req, res) => res.redirect('/admin/'));
-app.get('/', (req, res) => res.redirect('/admin/'));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
