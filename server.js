@@ -239,7 +239,7 @@ app.get('/api/admin/fixed-items', authenticateToken, adminOnly, async (req, res)
         mi.id, mi.name, mi.meal_type,
         mi.scraped_calories, mi.scraped_protein, mi.scraped_carbs, mi.scraped_fat, mi.scraped_serving_size,
         mi.override_calories, mi.override_protein, mi.override_carbs, mi.override_fat, mi.override_serving_size,
-        mi.admin_review_status, mi.is_customizable,
+        mi.admin_review_status, mi.is_customizable, mi.nutrislice_food_id,
         s.id as station_id, s.name as station_name
       FROM menu_items_master mi
       JOIN stations s ON mi.station_id = s.id
@@ -269,6 +269,79 @@ app.post('/api/admin/fixed-items', authenticateToken, adminOnly, async (req, res
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error('Fixed item insert error:', error);
+    if (error.code === '23505') return res.status(400).json({ error: 'An item with that name already exists in this station.' });
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// Edits a fixed-menu item.
+// - Items added by hand: everything is edited directly (name, station, macros).
+// - Items from Nutrislice: the scraper rewrites their name and Nutrislice
+//   values on every run, so edits to macros/serving are saved as overrides
+//   (which the scraper never touches). A blank field means "use the Nutrislice
+//   value". Name and station can't be changed for these.
+app.put('/api/admin/fixed-items/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const toInt = v => (v === '' || v == null || Number.isNaN(Number(v)) ? null : Math.round(Number(v)));
+    const { name, station_id, serving_size } = req.body;
+    const calories = toInt(req.body.calories), protein = toInt(req.body.protein);
+    const carbs = toInt(req.body.carbs), fat = toInt(req.body.fat);
+    const serving = serving_size && String(serving_size).trim() ? String(serving_size).trim() : null;
+
+    const found = await pool.query(
+      `SELECT mi.*, s.dining_hall_id
+       FROM menu_items_master mi
+       JOIN stations s ON s.id = mi.station_id
+       JOIN dining_halls dh ON dh.id = s.dining_hall_id
+       WHERE mi.id = $1 AND dh.type = 'fixed'`,
+      [id]
+    );
+    if (found.rows.length === 0) return res.status(404).json({ error: 'Item not found' });
+    const item = found.rows[0];
+
+    let result;
+    if (item.nutrislice_food_id == null) {
+      if (!name || !String(name).trim()) return res.status(400).json({ error: 'Item name is required.' });
+      const stationCheck = await pool.query(
+        'SELECT 1 FROM stations WHERE id = $1 AND dining_hall_id = $2',
+        [station_id, item.dining_hall_id]
+      );
+      if (stationCheck.rows.length === 0) return res.status(400).json({ error: 'Pick a station in this dining hall.' });
+      result = await pool.query(
+        `UPDATE menu_items_master SET
+           name = $1, station_id = $2,
+           scraped_calories = $3, scraped_protein = $4, scraped_carbs = $5, scraped_fat = $6,
+           scraped_serving_size = $7,
+           override_calories = NULL, override_protein = NULL, override_carbs = NULL,
+           override_fat = NULL, override_serving_size = NULL,
+           admin_review_status = 'reviewed', nutrition_status = 'accepted',
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $8 RETURNING *`,
+        [String(name).trim(), station_id, calories, protein, carbs, fat, serving, id]
+      );
+    } else {
+      // Only keep an override where it actually differs from Nutrislice.
+      const ov = (v, scraped) => (v == null || v == scraped ? null : v);
+      const o = [
+        ov(calories, item.scraped_calories), ov(protein, item.scraped_protein),
+        ov(carbs, item.scraped_carbs), ov(fat, item.scraped_fat),
+        ov(serving, item.scraped_serving_size),
+      ];
+      const hasOverrides = o.some(v => v != null);
+      result = await pool.query(
+        `UPDATE menu_items_master SET
+           override_calories = $1, override_protein = $2, override_carbs = $3,
+           override_fat = $4, override_serving_size = $5,
+           admin_review_status = $6, nutrition_status = $7,
+           updated_at = CURRENT_TIMESTAMP
+         WHERE id = $8 RETURNING *`,
+        [...o, hasOverrides ? 'overridden' : 'reviewed', hasOverrides ? 'overridden' : 'accepted', id]
+      );
+    }
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Fixed item update error:', error);
     if (error.code === '23505') return res.status(400).json({ error: 'An item with that name already exists in this station.' });
     res.status(500).json({ error: 'Server error' });
   }

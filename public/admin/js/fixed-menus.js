@@ -164,13 +164,96 @@
             <td>${fat ?? '—'}</td>
             <td>${escHtml(serving) || '—'}</td>
             <td class="ingredients-cell${item.scraped_ingredients ? '' : ' none'}" title="${ingredientsTitle}">${ingredientsText}</td>
-            <td><button class="delete-btn" onclick="deleteFixedItem(${item.id}, '${hall}')">Delete</button></td>
+            <td style="white-space:nowrap;">
+              <button class="edit-btn" onclick="toggleFixedEdit(${item.id})">Edit</button>
+              <button class="delete-btn" onclick="deleteFixedItem(${item.id}, '${hall}')">Delete</button>
+            </td>
+          </tr>
+          <tr id="fixed-edit-row-${item.id}" class="edit-row" style="display:none;">
+            <td colspan="10">${renderFixedEditForm(item, hall)}</td>
           </tr>
         `;
       });
     });
 
     tbody.innerHTML = html;
+  }
+
+  // ---- EDIT FIXED ITEM ----
+
+  function renderFixedEditForm(item, hall) {
+    const fromNutrislice = item.nutrislice_food_id != null;
+    const val = (override, scraped) => fromNutrislice ? (override ?? '') : (scraped ?? '');
+    const ph = scraped => fromNutrislice && scraped != null ? `placeholder="${escHtml(String(scraped))}"` : '';
+    const stations = (stationsByHall[hall] || []).map(s =>
+      `<option value="${s.id}" ${s.id === item.station_id ? 'selected' : ''}>${escHtml(s.name)}</option>`
+    ).join('');
+
+    return `
+      <div class="edit-form">
+        <div class="field">
+          <label>Name</label>
+          <input type="text" class="wide" id="fx-name-${item.id}" value="${escHtml(item.name)}" ${fromNutrislice ? 'disabled' : ''}>
+        </div>
+        <div class="field">
+          <label>Station</label>
+          <select id="fx-station-${item.id}" ${fromNutrislice ? 'disabled' : ''}>${stations}</select>
+        </div>
+        <div class="field"><label>Calories</label><input type="number" id="fx-cal-${item.id}" value="${val(item.override_calories, item.scraped_calories)}" ${ph(item.scraped_calories)}></div>
+        <div class="field"><label>Protein (g)</label><input type="number" id="fx-pro-${item.id}" value="${val(item.override_protein, item.scraped_protein)}" ${ph(item.scraped_protein)}></div>
+        <div class="field"><label>Carbs (g)</label><input type="number" id="fx-carb-${item.id}" value="${val(item.override_carbs, item.scraped_carbs)}" ${ph(item.scraped_carbs)}></div>
+        <div class="field"><label>Fat (g)</label><input type="number" id="fx-fat-${item.id}" value="${val(item.override_fat, item.scraped_fat)}" ${ph(item.scraped_fat)}></div>
+        <div class="field"><label>Serving</label><input type="text" class="wide" id="fx-serving-${item.id}" value="${escHtml(val(item.override_serving_size, item.scraped_serving_size))}" ${ph(item.scraped_serving_size)}></div>
+      </div>
+      ${fromNutrislice ? `
+        <div class="scraped-hint">
+          From Nutrislice — name and station update automatically. Leave a field blank to use the Nutrislice value (shown in grey);
+          anything you enter is kept even when the scraper runs again.
+        </div>` : ''}
+      <div class="edit-actions" style="margin-top:12px;">
+        <button class="btn-save" onclick="saveFixedItem(${item.id}, '${hall}')">Save</button>
+        ${fromNutrislice ? `<button class="btn-clear" onclick="resetFixedItem(${item.id}, '${hall}')">Reset to Nutrislice</button>` : ''}
+        <button class="btn-cancel" onclick="toggleFixedEdit(${item.id})">Cancel</button>
+        <span class="form-error" id="fx-error-${item.id}"></span>
+      </div>
+    `;
+  }
+
+  function toggleFixedEdit(id) {
+    const row = document.getElementById(`fixed-edit-row-${id}`);
+    if (row) row.style.display = row.style.display === 'none' ? '' : 'none';
+  }
+
+  async function saveFixedItem(id, hall) {
+    const get = f => document.getElementById(`fx-${f}-${id}`).value;
+    const errEl = document.getElementById(`fx-error-${id}`);
+    errEl.textContent = '';
+    const body = {
+      name: get('name').trim(),
+      station_id: parseInt(get('station')),
+      calories: get('cal'),
+      protein: get('pro'),
+      carbs: get('carb'),
+      fat: get('fat'),
+      serving_size: get('serving').trim(),
+    };
+    const res = await apiFetch(`/api/admin/fixed-items/${id}`, { method: 'PUT', body: JSON.stringify(body) });
+    if (!res) return;
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      errEl.textContent = err.error || 'Failed to save.';
+      return;
+    }
+    await loadFixedItems(hall);
+    renderFixedItems(hall);
+  }
+
+  async function resetFixedItem(id, hall) {
+    if (!confirm('Remove your edits and use the Nutrislice values for this item?')) return;
+    const res = await apiFetch(`/api/admin/menu-items/${id}/overrides`, { method: 'DELETE' });
+    if (!res || !res.ok) { alert('Reset failed.'); return; }
+    await loadFixedItems(hall);
+    renderFixedItems(hall);
   }
 
   async function addFixedItem() {
