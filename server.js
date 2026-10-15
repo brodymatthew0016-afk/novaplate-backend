@@ -828,6 +828,25 @@ app.patch('/api/admin/users/:id/admin', authenticateToken, adminOnly, async (req
   }
 });
 
+// Permanently deletes a user. meal_logs.user_id has ON DELETE CASCADE, so
+// their diary history goes with it (same as the self-serve account delete).
+app.delete('/api/admin/users/:id', authenticateToken, adminOnly, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id)) return res.status(400).json({ error: 'Invalid user id' });
+    // Don't let an admin delete their own account from this panel.
+    if (id === req.user.userId) {
+      return res.status(400).json({ error: "You can't delete your own account from the admin panel." });
+    }
+    const result = await pool.query('DELETE FROM users WHERE id = $1 RETURNING id, email', [id]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'User not found' });
+    res.json({ message: 'User deleted', user: result.rows[0] });
+  } catch (error) {
+    console.error('Admin delete user error:', error);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // ---- DAILY MENUS ----
 // Read/write what's actually scheduled on a given date for a given (variable)
 // dining hall — i.e. the daily_schedule join, not the fixed-menu items.

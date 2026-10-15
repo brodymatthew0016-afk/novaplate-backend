@@ -33,7 +33,8 @@
         <td>${timeAgo(u.last_logged_at)}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
         <td><span class="badge ${u.is_admin ? 'badge-true' : 'badge-false'}">${u.is_admin ? 'True' : 'False'}</span></td>
-        <td><button class="btn-toggle-admin" onclick="toggleAdmin(${u.id}, ${!u.is_admin})">${u.is_admin ? 'Revoke Admin' : 'Make Admin'}</button></td>
+        <td><button class="btn-toggle-admin" onclick="toggleAdmin(${u.id}, ${!u.is_admin})">${u.is_admin ? 'Revoke Admin' : 'Make Admin'}</button>
+          <button class="btn-delete-user" onclick="deleteUser(${u.id})">Delete</button></td>
       </tr>
     `).join('');
   }
@@ -46,5 +47,15 @@
     if (!res) return;
     const data = await res.json();
     if (!res.ok) { alert(data.error || 'Failed to update user.'); return; }
+    loadUsers();
+  }
+
+  async function deleteUser(id) {
+    const email = document.querySelector(`#user-row-${id} td`)?.textContent || 'this user';
+    if (!confirm(`Permanently delete ${email}? This also deletes all of their meal logs and cannot be undone.`)) return;
+    const res = await apiFetch(`/api/admin/users/${id}`, { method: 'DELETE' });
+    if (!res) return;
+    const data = await res.json();
+    if (!res.ok) { alert(data.error || 'Failed to delete user.'); return; }
     loadUsers();
   }
