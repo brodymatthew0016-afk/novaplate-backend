@@ -35,21 +35,14 @@ const HALL_CALENDARS = {
   'Holy Grounds Express @ Donahue Market': '5983f41ebdefc4019eeaa2bc280b1a4cce5a5641361e0bc59432bb996372d5a1@group.calendar.google.com',
 };
 
-function formatTime(d) {
-  // The scraper runs on GitHub Actions, whose runners default to UTC.
-  // Without an explicit timeZone, this would format times using the
-  // server's local time (UTC) instead of Villanova's, causing a 4-5
-  // hour shift depending on daylight saving. Pin it to Eastern time.
-  return d.toLocaleTimeString('en-US', {
-    hour: 'numeric',
-    minute: '2-digit',
-    timeZone: 'America/New_York',
-  });
-}
+// How many days of hours to store. The API computes open/closed from these
+// stored windows, so this only needs to cover the gap between syncs (with
+// plenty of slack in case a sync fails).
+const DAYS_AHEAD = 7;
 
-// Checks a single hall's calendar and returns whether it's open right now,
-// a human-readable status string, and (when closed) the next time it opens.
-async function getHallStatus(calendarId) {
+// Fetches a hall's public Google Calendar and returns every open window
+// from the start of today (Eastern) through DAYS_AHEAD days out.
+async function getHallWindows(calendarId) {
   const url = `https://calendar.google.com/calendar/ical/${encodeURIComponent(calendarId)}/public/basic.ics`;
   const data = await ical.async.fromURL(url);
 
@@ -58,8 +51,8 @@ async function getHallStatus(calendarId) {
   // "Today" must be Villanova's calendar day (Eastern), not the server's
   // local day — on GitHub Actions (UTC) these differ by 4-5 hours, which
   // would otherwise clip early-morning/late-night events out of the
-  // day's occurrence search. Compute the actual UTC offset for Eastern
-  // time right now (handles EDT/-4 vs EST/-5 automatically).
+  // search. Compute the actual UTC offset for Eastern time right now
+  // (handles EDT/-4 vs EST/-5 automatically).
   const offsetParts = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
     timeZoneName: 'shortOffset',
@@ -69,65 +62,60 @@ async function getHallStatus(calendarId) {
   const offsetStr = `${offsetHours <= 0 ? '-' : '+'}${String(Math.abs(offsetHours)).padStart(2, '0')}:00`;
 
   const easternDateStr = now.toLocaleDateString('en-CA', { timeZone: 'America/New_York' }); // YYYY-MM-DD
-  const startOfDay = new Date(`${easternDateStr}T00:00:00${offsetStr}`);
-  const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+  const windowStart = new Date(`${easternDateStr}T00:00:00${offsetStr}`);
+  const windowEnd = new Date(windowStart.getTime() + DAYS_AHEAD * 24 * 60 * 60 * 1000);
 
-  // How far ahead to look for the next opening if the hall is closed now.
-  const lookaheadEnd = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-
-  let match = null;
-  let nextStart = null; // earliest future occurrence start, across all events
+  const windows = [];
 
   for (const key in data) {
     const ev = data[key];
     if (ev.type !== 'VEVENT') continue;
+    const label = ev.summary || null;
 
     if (ev.rrule) {
-      // Recurring event — expand occurrences from today through the
-      // lookahead window and check each one.
+      // Recurring event — expand its occurrences in the window, skipping
+      // any dates the calendar has cancelled (EXDATE).
       const durationMs = new Date(ev.end).getTime() - new Date(ev.start).getTime();
-      const occurrences = ev.rrule.between(startOfDay, lookaheadEnd, true);
-      for (const occStart of occurrences) {
-        const occEnd = new Date(occStart.getTime() + durationMs);
-        if (!match && now >= occStart && now <= occEnd) {
-          match = { start: occStart, end: occEnd, summary: ev.summary };
-        } else if (occStart > now && (!nextStart || occStart < nextStart)) {
-          nextStart = occStart;
-        }
+      const excluded = new Set(Object.values(ev.exdate || {}).map(d => new Date(d).getTime()));
+      for (const occStart of ev.rrule.between(windowStart, windowEnd, true)) {
+        if (excluded.has(occStart.getTime())) continue;
+        windows.push({ opensAt: occStart, closesAt: new Date(occStart.getTime() + durationMs), label });
       }
     } else {
       const start = new Date(ev.start);
       const end = new Date(ev.end);
-      if (!match && now >= start && now <= end) {
-        match = { start, end, summary: ev.summary };
-      } else if (start > now && start <= lookaheadEnd && (!nextStart || start < nextStart)) {
-        nextStart = start;
+      if (end >= windowStart && start <= windowEnd) {
+        windows.push({ opensAt: start, closesAt: end, label });
       }
     }
   }
 
-  if (!match) {
-    return { isOpen: false, statusText: 'Closed', nextOpenAt: nextStart };
-  }
-
-  const label = match.summary || 'Open';
-  return {
-    isOpen: true,
-    statusText: `${label}: ${formatTime(match.start)} - ${formatTime(match.end)}`,
-    nextOpenAt: null,
-  };
+  return windows;
 }
 
-async function upsertHallStatus(client, diningHallId, isOpen, statusText, nextOpenAt) {
-  await client.query(
-    `UPDATE dining_halls
-     SET is_open = $2,
-         status_text = $3,
-         status_updated_at = CURRENT_TIMESTAMP,
-         next_open_at = $4
-     WHERE id = $1`,
-    [diningHallId, isOpen, statusText, nextOpenAt]
-  );
+// Replaces a hall's stored hours with a fresh set, in one transaction so the
+// API never sees a half-written schedule.
+async function saveHallWindows(client, diningHallId, windows) {
+  await client.query('BEGIN');
+  try {
+    await client.query('DELETE FROM dining_hall_hours WHERE dining_hall_id = $1', [diningHallId]);
+    for (const w of windows) {
+      await client.query(
+        'INSERT INTO dining_hall_hours (dining_hall_id, opens_at, closes_at, label) VALUES ($1, $2, $3, $4)',
+        [diningHallId, w.opensAt, w.closesAt, w.label]
+      );
+    }
+    // status_updated_at now means "hours last synced" — the API uses it to
+    // know this hall's status should be computed from dining_hall_hours.
+    await client.query(
+      'UPDATE dining_halls SET status_updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+      [diningHallId]
+    );
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  }
 }
 
 async function main() {
@@ -143,12 +131,13 @@ async function main() {
       }
 
       try {
-        const { isOpen, statusText, nextOpenAt } = await getHallStatus(calendarId);
-        await upsertHallStatus(client, hall.id, isOpen, statusText, nextOpenAt);
-        const suffix = !isOpen && nextOpenAt ? ` — next open ${formatTime(nextOpenAt)}` : '';
-        console.log(`  ${hall.name}: ${isOpen ? 'OPEN' : 'CLOSED'} — "${statusText}"${suffix}`);
+        // Fetch first; only touch the DB if the calendar loaded, so a
+        // Google hiccup never wipes a hall's existing hours.
+        const windows = await getHallWindows(calendarId);
+        await saveHallWindows(client, hall.id, windows);
+        console.log(`  ${hall.name}: saved ${windows.length} open window(s)`);
       } catch (err) {
-        console.error(`  Error checking ${hall.name}:`, err.message);
+        console.error(`  Error syncing ${hall.name}:`, err.message);
       }
     }
   } finally {

@@ -104,10 +104,55 @@ app.get('/api/auth/me', authenticateToken, async (req, res) => {
 
 // ========== DINING HALL ROUTES ==========
 
+function formatEasternTime(d) {
+  return new Date(d).toLocaleTimeString('en-US', {
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone: 'America/New_York',
+  });
+}
+
+// Fills in is_open / status_text / next_open_at for each hall from the hours
+// stored in dining_hall_hours (synced from the halls' Google Calendars by
+// scrape-dining-status.js a couple of times a day). Working this out at
+// request time means the database is only touched when someone actually uses
+// the app, instead of a scraper waking it every few minutes.
+// Halls that have never been synced (no calendar) keep their stored values.
+async function withLiveStatus(halls) {
+  const { rows: hours } = await pool.query(
+    `SELECT dining_hall_id, opens_at, closes_at, label
+     FROM dining_hall_hours
+     WHERE closes_at >= NOW()
+     ORDER BY opens_at`
+  );
+  const byHall = new Map();
+  for (const h of hours) {
+    if (!byHall.has(h.dining_hall_id)) byHall.set(h.dining_hall_id, []);
+    byHall.get(h.dining_hall_id).push(h);
+  }
+
+  const now = new Date();
+  return halls.map(hall => {
+    if (!hall.status_updated_at) return hall;
+    const windows = byHall.get(hall.id) || [];
+    const current = windows.find(w => new Date(w.opens_at) <= now && now <= new Date(w.closes_at));
+    if (current) {
+      return {
+        ...hall,
+        is_open: true,
+        status_text: `${current.label || 'Open'}: ${formatEasternTime(current.opens_at)} - ${formatEasternTime(current.closes_at)}`,
+        next_open_at: null,
+      };
+    }
+    const next = windows.find(w => new Date(w.opens_at) > now);
+    return { ...hall, is_open: false, status_text: 'Closed', next_open_at: next ? next.opens_at : null };
+  });
+}
+
 app.get('/api/dining-halls', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM dining_halls ORDER BY name');
-    res.json(result.rows);
+    res.json(await withLiveStatus(result.rows));
   } catch (error) {
     console.error('Error fetching dining halls:', error);
     res.status(500).json({ error: 'Server error' });
@@ -766,7 +811,7 @@ app.get('/api/admin/system-health', authenticateToken, adminOnly, async (req, re
       ) sched ON sched.dining_hall_id = dh.id
       ORDER BY dh.name
     `);
-    res.json(result.rows);
+    res.json(await withLiveStatus(result.rows));
   } catch (error) {
     console.error('Admin system health error:', error);
     res.status(500).json({ error: 'Server error' });
