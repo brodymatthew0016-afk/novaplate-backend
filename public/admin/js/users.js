@@ -32,7 +32,7 @@
         <td>${u.meal_log_count}</td>
         <td>${timeAgo(u.last_logged_at)}</td>
         <td>${new Date(u.created_at).toLocaleDateString()}</td>
-        <td><span class="badge ${u.is_admin ? 'badge-true' : 'badge-false'}">${u.is_admin ? 'True' : 'False'}</span></td>
+        <td><span class="badge ${u.is_admin ? 'badge-true' : 'badge-false'}">${u.is_admin ? 'Admin' : 'Student'}</span></td>
         <td><button class="btn-toggle-admin" onclick="toggleAdmin(${u.id}, ${!u.is_admin})">${u.is_admin ? 'Revoke Admin' : 'Make Admin'}</button>
           <button class="btn-delete-user" onclick="deleteUser(${u.id})">Delete</button></td>
       </tr>

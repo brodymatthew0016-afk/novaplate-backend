@@ -43,7 +43,7 @@
     const stations = stationsByHall[hall] || [];
 
     if (stations.length === 0) {
-      list.innerHTML = '<div style="padding: 16px; font-size: 13px; color: #aaa; text-align: center;">No stations yet.</div>';
+      list.innerHTML = '<div class="station-list-empty">No stations yet.</div>';
       return;
     }
 
@@ -152,13 +152,13 @@
         const ingredientsTitle = item.scraped_ingredients ? escHtml(item.scraped_ingredients) : '';
         const ingredientsText = item.scraped_ingredients
           ? escHtml(item.scraped_ingredients)
-          : '<span style="color:#bbb;font-style:italic;">—</span>';
+          : '<span class="muted-note">—</span>';
         html += `
           <tr>
             <td><div class="item-name">${escHtml(item.name)}</div></td>
             <td>${escHtml(item.station_name)}</td>
             <td>${item.meal_type || '—'}</td>
-            <td>${cal ?? '<span style="color:#e53e3e;font-style:italic">—</span>'}</td>
+            <td>${cal ?? '<span class="missing">—</span>'}</td>
             <td>${pro ?? '—'}</td>
             <td>${carb ?? '—'}</td>
             <td>${fat ?? '—'}</td>
@@ -210,7 +210,7 @@
           From Nutrislice — the name updates automatically. Leave a field blank to use the Nutrislice value (shown in grey);
           the station and anything you enter are kept even when the scraper runs again.
         </div>` : ''}
-      <div class="edit-actions" style="margin-top:12px;">
+      <div class="edit-actions" style="margin-top:14px;">
         <button class="btn-save" onclick="saveFixedItem(${item.id}, '${hall}')">Save</button>
         ${fromNutrislice ? `<button class="btn-clear" onclick="resetFixedItem(${item.id}, '${hall}')">Reset to Nutrislice</button>` : ''}
         <button class="btn-cancel" onclick="toggleFixedEdit(${item.id})">Cancel</button>

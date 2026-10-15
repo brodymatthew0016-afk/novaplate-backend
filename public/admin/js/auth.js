@@ -6,9 +6,10 @@
     const errEl = document.getElementById('login-error');
     errEl.textContent = '';
     try {
-      const res = await fetch(`${API}/api/admin/bypass`, {
+      const res = await fetch(`${API}/api/auth/login`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
       });
       const data = await res.json();
       if (!res.ok) { errEl.textContent = data.error || 'Login failed'; return; }

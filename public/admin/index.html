@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Dining Admin</title>
+  <title>NovaPlate Admin</title>
   <link rel="icon" type="image/png" href="/novaplate-logo-final.png">
   <link rel="apple-touch-icon" href="/novaplate-logo-final.png">
   <link rel="stylesheet" href="admin.css">
@@ -13,9 +13,13 @@
 <!-- LOGIN -->
 <div id="login-screen">
   <div class="login-box">
-    <h1>Dining Admin</h1>
-    <input type="email" id="login-email" placeholder="Email" />
-    <input type="password" id="login-password" placeholder="Password" />
+    <div class="login-brand">
+      <img src="/novaplate-logo-final.png" alt="" />
+      <span>NovaPlate</span>
+    </div>
+    <p class="login-sub">Admin portal</p>
+    <input type="email" id="login-email" placeholder="Email" autocomplete="username" />
+    <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" />
     <button onclick="login()">Sign In</button>
     <div id="login-error"></div>
   </div>
@@ -64,6 +68,10 @@
 
   <!-- NUTRITION REVIEW TAB -->
   <div class="tab-panel active" id="tab-nutrition">
+    <header class="page-head">
+      <h1>Nutrition Review</h1>
+      <p>Check and correct what the scraper pulled in.</p>
+    </header>
     <div class="stats-bar">
       <div class="stat-card pending">
         <div class="label">Needs Review</div>
@@ -126,6 +134,10 @@
 
   <!-- FIXED MENUS TAB -->
   <div class="tab-panel" id="tab-fixed">
+    <header class="page-head">
+      <h1>Fixed Menus</h1>
+      <p>Café Nova and Connelly Center — same menu every day.</p>
+    </header>
     <div class="fixed-menus-wrap">
       <div class="fixed-menus-header">
         <h2>Fixed Dining Hall Menus</h2>
@@ -144,7 +156,7 @@
             <h3 id="stations-panel-title">Café Nova Stations</h3>
           </div>
           <div class="station-list" id="station-list">
-            <div class="loading" style="padding: 20px; font-size: 13px;">Loading...</div>
+            <div class="station-list-empty">Loading...</div>
           </div>
           <div class="add-station-form">
             <input type="text" id="new-station-name" placeholder="New station name..." />
@@ -191,8 +203,8 @@
                 <label>Serving Size</label>
                 <input type="text" id="new-item-serving" placeholder="e.g. 1 sandwich" />
               </div>
-              <div class="form-field" style="justify-content: flex-end;">
-                <button class="btn-add" onclick="addFixedItem()">+ Add Item</button>
+              <div class="form-field">
+                <button class="btn-add" onclick="addFixedItem()">Add Item</button>
               </div>
             </div>
             <div id="add-item-msg"></div>
@@ -203,18 +215,18 @@
               <h3 id="fixed-items-title">Café Nova Items</h3>
               <span id="fixed-items-count"></span>
             </div>
-            <table style="width:100%; border-collapse:collapse;">
-              <thead style="background:#f8fafc; border-bottom: 2px solid #e5e7eb;">
+            <table>
+              <thead>
                 <tr>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Item</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Station</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Meal</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Cal</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Pro</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Carbs</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Fat</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Serving</th>
-                  <th style="text-align:left; padding:12px 16px; font-size:12px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:#555;">Ingredients</th>
+                  <th>Item</th>
+                  <th>Station</th>
+                  <th>Meal</th>
+                  <th>Cal</th>
+                  <th>Pro</th>
+                  <th>Carbs</th>
+                  <th>Fat</th>
+                  <th>Serving</th>
+                  <th>Ingredients</th>
                   <th></th>
                 </tr>
               </thead>
@@ -231,6 +243,10 @@
 
   <!-- DAILY MENUS TAB -->
   <div class="tab-panel" id="tab-daily">
+    <header class="page-head">
+      <h1>Daily Menus</h1>
+      <p>What each dining hall is serving on a given day.</p>
+    </header>
     <div class="daily-toolbar">
       <div class="form-field">
         <label>Dining Hall</label>
@@ -274,11 +290,20 @@
 
   <!-- SYSTEM HEALTH TAB -->
   <div class="tab-panel" id="tab-health">
+    <header class="page-head">
+      <h1>System Health</h1>
+      <p>Calendar hours sync and today’s menus, per dining hall.</p>
+    </header>
     <div class="health-grid" id="health-grid">
-      <div class="loading" style="padding: 20px;">Loading...</div>
+      <div class="loading">Loading...</div>
     </div>
-  </div>  <!-- USERS TAB -->
+  </div>
+
+  <!-- USERS TAB -->
   <div class="tab-panel" id="tab-users">
+    <header class="page-head">
+      <h1>Users</h1>
+    </header>
     <div class="users-toolbar">
       <input type="text" id="users-search-input" placeholder="Search by email..." oninput="debounceLoadUsers()" />
       <span class="count-label" id="users-count-label"></span>

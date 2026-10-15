@@ -1,5 +1,12 @@
 // ---- NUTRITION REVIEW ----
 
+  const STATUS_LABELS = {
+    pending: 'Needs review',
+    overridden: 'Overridden',
+    reviewed: 'Reviewed',
+    needs_count: 'Needs count',
+  };
+
   async function loadStats() {
     const res = await apiFetch('/api/admin/stats');
     if (!res) return;
@@ -88,7 +95,7 @@
         <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'fat', this)" title="Click to edit">${fat}</td>
         <td class="nutrition-cell" onclick="startInlineEdit(${item.id}, 'serving', this)" title="Click to edit">${serving}</td>
         <td class="ingredients-cell${item.scraped_ingredients ? '' : ' none'}" title="${ingredientsTitle}">${ingredientsText}</td>
-        <td><span class="badge ${item.admin_review_status}">${item.admin_review_status}</span></td>
+        <td><span class="badge ${item.admin_review_status}">${STATUS_LABELS[item.admin_review_status] || item.admin_review_status}</span></td>
         <td style="white-space:nowrap;">
           <button class="edit-btn" onclick="toggleEdit(${item.id})">Edit</button>
           ${showQuickReview ? `<button class="quick-review-btn" onclick="quickReview(${item.id})" title="Mark as reviewed">✓</button>` : ''}
@@ -114,17 +121,17 @@
     const assortedChecked = item.is_assorted ? 'checked' : '';
 
     const assortedPanel = item.is_assorted ? `
-      <div class="assorted-panel" id="assorted-panel-${item.id}" style="margin-top:12px; padding:12px; background:#fff; border:1px solid #dbe4ff; border-radius:8px;">
-        <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Dispensed Items</div>
+      <div class="assorted-panel" id="assorted-panel-${item.id}">
+        <div class="assorted-title">Dispensed Items</div>
         <div id="children-list-${item.id}">Loading...</div>
-        <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
-          <input type="text" id="child-name-${item.id}" placeholder="Name" style="width:140px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <input type="number" id="child-cal-${item.id}" placeholder="Cal" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <input type="number" id="child-pro-${item.id}" placeholder="Pro" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <input type="number" id="child-carb-${item.id}" placeholder="Carb" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <input type="number" id="child-fat-${item.id}" placeholder="Fat" style="width:60px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <input type="text" id="child-serving-${item.id}" placeholder="Serving" style="width:90px; padding:6px 8px; border:1px solid #ddd; border-radius:6px; font-size:13px;" />
-          <button class="btn-add-station" onclick="addChildItem(${item.id})">+ Add</button>
+        <div class="assorted-add">
+          <input type="text" id="child-name-${item.id}" placeholder="Name" class="wide" />
+          <input type="number" id="child-cal-${item.id}" placeholder="Cal" />
+          <input type="number" id="child-pro-${item.id}" placeholder="Pro" />
+          <input type="number" id="child-carb-${item.id}" placeholder="Carb" />
+          <input type="number" id="child-fat-${item.id}" placeholder="Fat" />
+          <input type="text" id="child-serving-${item.id}" placeholder="Serving" class="wide" />
+          <button class="btn-add-station" onclick="addChildItem(${item.id})">Add</button>
         </div>
       </div>
     ` : '';
@@ -221,9 +228,9 @@
     const list = document.getElementById(`children-list-${id}`);
     if (!list) return;
     list.innerHTML = children.length === 0
-      ? '<span style="color:#aaa; font-size:13px;">No items added yet.</span>'
+      ? '<span class="muted-note">No items added yet.</span>'
       : children.map(c => `
-          <div style="display:flex; justify-content:space-between; padding:4px 0; font-size:13px; border-bottom:1px solid #f0f0f0;">
+          <div class="assorted-child">
             <span>${escHtml(c.name)} — ${c.scraped_calories ?? '—'} cal</span>
             <button class="delete-btn" onclick="deleteChild(${c.id}, ${id})">Delete</button>
           </div>
@@ -305,7 +312,7 @@
       type="${isText ? 'text' : 'number'}"
       value="${escHtml(String(currentVal))}"
       placeholder="${escHtml(String(placeholder))}"
-      style="width:${isText ? '110px' : '70px'}; padding:3px 6px; border:1px solid #003087; border-radius:4px; font-size:13px;"
+      style="width:${isText ? '120px' : '76px'};"
       onclick="event.stopPropagation()"
     />`;
 

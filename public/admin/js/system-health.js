@@ -2,7 +2,7 @@
 
   async function loadSystemHealth() {
     const grid = document.getElementById('health-grid');
-    grid.innerHTML = '<div class="loading" style="padding: 20px;">Loading...</div>';
+    grid.innerHTML = '<div class="loading">Loading...</div>';
     const res = await apiFetch('/api/admin/system-health');
     if (!res) return;
     const halls = await res.json();
@@ -12,7 +12,7 @@
   function renderHealthCards(halls) {
     const grid = document.getElementById('health-grid');
     if (halls.length === 0) {
-      grid.innerHTML = '<div class="empty" style="padding: 20px;">No dining halls found.</div>';
+      grid.innerHTML = '<div class="empty">No dining halls found.</div>';
       return;
     }
 

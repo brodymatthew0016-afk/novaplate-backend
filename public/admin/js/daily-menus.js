@@ -67,7 +67,7 @@
         <td>${escHtml(r.serving_size)}</td>
         <td>${r.schedule_id != null
           ? `<button class="delete-btn" onclick="removeDailyMenuItem(${r.schedule_id})">Remove</button>`
-          : '<span style="color:#aaa;font-size:12px;">Edit in Fixed Menus</span>'}</td>
+          : '<span class="muted-note">Edit in Fixed Menus</span>'}</td>
       </tr>
     `).join('');
   }
