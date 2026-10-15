@@ -24,6 +24,19 @@ const DINING_HALL_SLUGS = {
 
 const MEAL_TYPES = ['breakfast', 'lunch', 'dinner'];
 
+// Fixed-menu halls: same menu every day, so instead of scheduling items per
+// date we keep one standing list of active items (the app shows all active
+// items for 'fixed' halls). Each entry lists the Nutrislice menus to pull.
+//   stripPrefix: removed from station names ("Cafe Nova Corner Grill" -> "Corner Grill")
+//   defaultStation: used when Nutrislice has no station headers
+const FIXED_HALLS = {
+  'Café Nova': { slug: 'cafe-nova', menus: ['lunch', 'dinner'], stripPrefix: 'Cafe Nova ' },
+  'Connelly Center': { slug: 'connelly-center', menus: ['retail-lunch'], defaultStation: 'Sushi & Bowls' },
+};
+// Fixed halls can be closed for a week or two (breaks), so look this many
+// weeks ahead for a day that has a menu posted.
+const FIXED_LOOKAHEAD_WEEKS = 4;
+
 // Stop scraping forward after this many weeks in a row with nothing posted.
 const MAX_EMPTY_WEEKS = 2;
 // Hard cap so a misbehaving API can't keep us looping forever.
@@ -55,7 +68,7 @@ const round = v => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Ma
 // [{ stationName, food }] — station headers are separate rows in the list,
 // so map each food to its station's header text via station_id (falling back
 // to the most recent header above it).
-function foodsWithStations(menuItems) {
+function foodsWithStations(menuItems, defaultStation = 'Unassigned') {
   const stationNames = new Map();
   for (const mi of menuItems) {
     if (mi.is_station_header && mi.text) stationNames.set(mi.station_id, mi.text.trim());
@@ -65,7 +78,7 @@ function foodsWithStations(menuItems) {
   for (const mi of menuItems) {
     if (mi.is_station_header) { lastHeader = mi.text ? mi.text.trim() : lastHeader; continue; }
     if (!mi.food) continue;
-    const stationName = stationNames.get(mi.station_id) || lastHeader || 'Unassigned';
+    const stationName = stationNames.get(mi.station_id) || lastHeader || defaultStation;
     out.push({ stationName, food: mi.food, item: mi });
   }
   return out;
@@ -249,6 +262,94 @@ async function scrapeHallMeal(client, hall, slug, mealType, fromDate, onlyDate) 
   return total;
 }
 
+// ---- FIXED-MENU HALLS ----
+
+// Returns the first day (from fromDate on) that has items, for one menu.
+async function firstPostedDay(slug, menu, fromDate) {
+  let weekDate = fromDate;
+  for (let w = 0; w < FIXED_LOOKAHEAD_WEEKS; w++) {
+    const week = await fetchWeek(slug, menu, weekDate);
+    const day = (week.days || []).find(d => d.date >= fromDate && (d.menu_items || []).some(i => i.food));
+    if (day) return day;
+    weekDate = addDays(week.start_date || weekDate, 7);
+  }
+  return null;
+}
+
+async function scrapeFixedHall(client, hall, cfg, fromDate) {
+  // foodId -> { stationName, food, item, menus: Set }
+  const foods = new Map();
+  for (const menu of cfg.menus) {
+    const day = await firstPostedDay(cfg.slug, menu, fromDate);
+    if (!day) { console.log(`  ${menu}: nothing posted in the next ${FIXED_LOOKAHEAD_WEEKS} weeks`); continue; }
+    console.log(`  ${menu}: using menu from ${day.date}`);
+    for (const entry of foodsWithStations(day.menu_items, cfg.defaultStation)) {
+      const key = Number(entry.food.id);
+      if (!foods.has(key)) foods.set(key, { ...entry, menus: new Set() });
+      foods.get(key).menus.add(menu);
+    }
+  }
+
+  // Safety: if Nutrislice returned nothing, leave the existing menu alone
+  // rather than switching every item off.
+  if (foods.size === 0) {
+    console.log('  No items found — leaving existing menu unchanged.');
+    return 0;
+  }
+
+  const assortedFoodIds = await getAssortedFoodIds(client, hall.id);
+  const stationCache = new Map();
+
+  for (const [foodId, { stationName: rawStation, food, item, menus }] of foods) {
+    if (assortedFoodIds.has(foodId)) continue; // admin manages assorted items + their children
+
+    const stationName = cfg.stripPrefix && rawStation.startsWith(cfg.stripPrefix)
+      ? rawStation.slice(cfg.stripPrefix.length)
+      : rawStation;
+    let stationId = stationCache.get(stationName);
+    if (!stationId) {
+      stationId = await upsertStation(client, hall.id, stationName);
+      stationCache.set(stationName, stationId);
+    }
+
+    // On every menu this hall has (or a single all-day menu) -> 'all';
+    // otherwise the specific meal it's served at.
+    const mealType = menus.size === cfg.menus.length ? 'all' : [...menus][0];
+
+    const n = food.rounded_nutrition_info || {};
+    const ingredients = food.ingredients && food.ingredients.trim() ? food.ingredients.trim() : null;
+    await upsertMenuItem(
+      client, stationId, foodId, food.name, mealType,
+      {
+        calories: round(n.calories),
+        protein: round(n.g_protein),
+        carbs: round(n.g_carbs),
+        fat: round(n.g_fat),
+        servingSize: servingSizeOf(food, item),
+      },
+      ingredients
+    );
+  }
+
+  // Switch off scraped items that are no longer on Nutrislice. Items added
+  // by hand in the admin portal (no nutrislice_food_id) are left alone.
+  const off = await client.query(
+    `UPDATE menu_items_master mi
+     SET is_active = false, updated_at = CURRENT_TIMESTAMP
+     FROM stations s
+     WHERE mi.station_id = s.id AND s.dining_hall_id = $1
+       AND mi.is_active = true
+       AND mi.nutrislice_food_id IS NOT NULL
+       AND mi.is_assorted = false
+       AND mi.parent_item_id IS NULL
+       AND NOT (mi.nutrislice_food_id = ANY($2::int[]))`,
+    [hall.id, [...foods.keys()]]
+  );
+  if (off.rowCount) console.log(`  Switched off ${off.rowCount} item(s) no longer on Nutrislice`);
+
+  return foods.size;
+}
+
 async function main() {
   // Optional date argument (YYYY-MM-DD) scrapes just that date; otherwise
   // scrape forward from today until Nutrislice has nothing more posted.
@@ -260,6 +361,20 @@ async function main() {
     const hallsResult = await client.query('SELECT id, name FROM dining_halls');
 
     for (const hall of hallsResult.rows) {
+      const fixedCfg = FIXED_HALLS[hall.name];
+      if (fixedCfg) {
+        // A single-date run (date argument) is for the daily menus only.
+        if (specificDate) continue;
+        console.log(`\n${hall.name} (${fixedCfg.slug}, fixed menu):`);
+        try {
+          const n = await scrapeFixedHall(client, hall, fixedCfg, fromDate);
+          console.log(`  ${n} items on the menu`);
+        } catch (err) {
+          console.error(`  Error scraping ${fixedCfg.slug}:`, err.message);
+        }
+        continue;
+      }
+
       const slug = DINING_HALL_SLUGS[hall.name];
       if (!slug) {
         console.log(`Skipping ${hall.name}: no Nutrislice slug configured`);
