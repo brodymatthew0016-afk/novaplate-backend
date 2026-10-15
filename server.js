@@ -149,6 +149,31 @@ async function withLiveStatus(halls) {
   });
 }
 
+// True when a hall's synced calendar hours show it closed for the whole of
+// `dateStr` (YYYY-MM-DD, Eastern). Only answers for dates the hours sync
+// covers (today through 6 days out) and halls that have a calendar; for
+// anything else it returns false so the menu still shows.
+async function isClosedAllDay(hall, dateStr) {
+  if (!hall.status_updated_at) return false;
+  const { rows } = await pool.query(
+    `SELECT
+       ($2::date BETWEEN (NOW() AT TIME ZONE 'America/New_York')::date
+                     AND (NOW() AT TIME ZONE 'America/New_York')::date + 6) AS covered,
+       EXISTS (
+         SELECT 1 FROM dining_hall_hours
+         WHERE dining_hall_id = $1
+           AND opens_at < (($2::date + 1)::timestamp AT TIME ZONE 'America/New_York')
+           AND closes_at > ($2::date::timestamp AT TIME ZONE 'America/New_York')
+       ) AS has_hours`,
+    [hall.id, dateStr]
+  );
+  return rows[0].covered && !rows[0].has_hours;
+}
+
+function todayEastern() {
+  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+}
+
 app.get('/api/dining-halls', authenticateToken, async (req, res) => {
   try {
     const result = await pool.query('SELECT * FROM dining_halls ORDER BY name');
@@ -267,12 +292,19 @@ app.get('/api/menu/:diningHallId', authenticateToken, async (req, res) => {
   try {
     const { diningHallId } = req.params;
     const { date, mealType } = req.query;
-    const selectedDate = date || new Date().toISOString().split('T')[0];
+    const selectedDate = date || todayEastern();
 
     const hallResult = await pool.query('SELECT * FROM dining_halls WHERE id = $1', [diningHallId]);
     if (hallResult.rows.length === 0) return res.status(404).json({ error: 'Dining hall not found' });
 
     const hall = hallResult.rows[0];
+
+    // Fixed halls have no daily schedule, so their menu would otherwise show
+    // even on days they're closed (breaks, weekends). Return nothing if the
+    // hall's calendar says it's closed all day.
+    if (hall.type === 'fixed' && await isClosedAllDay(hall, selectedDate)) {
+      return res.json([]);
+    }
 
     let query;
     const params = [diningHallId];
